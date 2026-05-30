@@ -7,9 +7,6 @@
 
 
 class Seguridad {
-public:
-    void iniciar();
-    void verificar();
 };
 
 

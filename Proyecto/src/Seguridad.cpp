@@ -1,7 +1,5 @@
-#include "Seguridad.h"
+//
+// Created by salazar on 29/05/26.
+//
 
-void Seguridad::iniciar() {
-}
-
-void Seguridad::verificar() {
-}
+#include "../include/Seguridad.h"
