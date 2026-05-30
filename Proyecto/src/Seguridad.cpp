@@ -1,5 +1,7 @@
-//
-// Created by salazar on 29/05/26.
-//
-
 #include "Seguridad.h"
+
+void Seguridad::iniciar() {
+}
+
+void Seguridad::verificar() {
+}
