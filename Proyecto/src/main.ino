@@ -7,11 +7,9 @@
 Seguridad seguridad;
 
 void setup() {
-    seguridad.iniciar();
     sei();
 }
 
 void loop() {
-    seguridad.verificar();
     _delay_ms(50);
 }
