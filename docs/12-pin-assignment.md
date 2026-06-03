@@ -1,7 +1,6 @@
 # Asignación de Pines — ATmega2560
 
-**⚠️ Tentativa — a confirmar durante implementación.**
-Basada en los códigos de clase existentes y la arquitectura propuesta.
+**⚠️ Pines LCD confirmados (T-01 resuelto). Resto tentativo — a confirmar durante implementación.**
 
 | Pin ATmega2560 | Señal | Periférico | Notas |
 |---|---|---|---|
@@ -9,11 +8,11 @@ Basada en los códigos de clase existentes y la arquitectura propuesta.
 | PA5 | LCD_D5 | LCD | |
 | PA6 | LCD_D6 | LCD | |
 | PA7 | LCD_D7 | LCD | |
-| PB0 | LCD_RS | LCD | Register Select (0=instrucción, 1=dato) |
-| PB1 | LCD_EN | LCD | Enable (flanco descendente) |
+| PA0 | LCD_RS | LCD | Register Select (0=instrucción, 1=dato) |
+| PA1 | LCD_EN | LCD | Enable (flanco descendente) |
+| PB1 | SPI_SCK | Módulo RFID | SPI Clock |
 | PB2 | SPI_MOSI | Módulo RFID | SPI Master Out |
 | PB3 | SPI_MISO | Módulo RFID | SPI Master In |
-| PB1 | SPI_SCK | Módulo RFID | SPI Clock (compartido con LCD_EN) |
 | PLx | SPI_CS_RFID | Módulo RFID | Chip Select adicional para RFID |
 | PL0 | TEC_FILA0 | Teclado | Fila 0 (salida) |
 | PL1 | TEC_FILA1 | Teclado | Fila 1 (salida) |
@@ -34,6 +33,5 @@ Basada en los códigos de clase existentes y la arquitectura propuesta.
 | Conflicto | Pines | Resolución Propuesta |
 |---|---|---|
 | TEC_FILA3 vs OC5A (servomotor) | PL3 | Usar Timer1/OC1A (PB5) para servomotor y PL3 solo para teclado |
-| LCD_EN vs SPI_SCK | PB1 | Separar: LCD_EN en otro pin (ej: PA0) y PB1 solo para SPI |
 
-**Nota**: La asignación anterior necesita revisión para eliminar conflictos. Se sugiere migrar LCD a puerto diferente (ej: PC0-PC7 o usar los pines del I2C-Maestro.ino que usa PA4-PA5 para RS y E).
+**Nota**: El conflicto LCD_EN vs SPI_SCK está resuelto: LCD_EN movido a PA1, SPI_SCK usa PB1 exclusivamente. Pendiente resolver conflicto TEC_FILA3 vs OC5A (T-02).

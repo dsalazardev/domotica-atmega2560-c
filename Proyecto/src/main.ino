@@ -1,15 +1,11 @@
 #include <avr/io.h>
-#include <avr/interrupt.h>
 #include <util/delay.h>
 
-#include "Seguridad.h"
-
-Seguridad seguridad;
+#include "LCD.h"
 
 void setup() {
-    for (int i = 0; i < 10; ++i) {
-
-    }
+    lcd_init();
+    lcd_imprimir("Hola Mundo!");
 }
 
 void loop() {
