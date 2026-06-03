@@ -1,5 +1,9 @@
 # Patrones de Código Reutilizables
 
+> **⚠️ IMPORTANTE**: Los códigos de clase de referencia usan `_delay_ms()`, `_delay_us()`, `Servo.h` y `Keypad.h`.
+> El proyecto NO puede usar ninguna de estas. Los patrones son solo guía de lógica — la implementación
+> del proyecto debe usar temporización non-blocking (`millis()`/`micros()`/NOPs) y control manual de periféricos.
+
 ## Patrón LCD 4-bit (6 referencias)
 
 | Archivo | Funciones clave |
@@ -13,6 +17,8 @@
 
 **Secuencia de inicialización**: 3 fases 8-bit → función set 4-bit → display on → clear.
 
+**Nota para el proyecto**: En el proyecto, `lcd_pulso()` usa NOP loops para el enable pulse, `lcd_comando()` usa `millis()` para los tiempos de ejecución, y `lcd_dato()` usa `micros()` para el timing. Ver `LCD.ino`.
+
 ## Patrón Teclado Matricial (3 referencias)
 
 | Archivo | Técnica |
@@ -22,6 +28,8 @@
 | `SPI-Maestro.ino` | Scan con debounce, esperar liberación de tecla |
 
 **Estructura**: PORTL salida (filas), PINK entrada con pull-up (columnas), matriz 4x4.
+
+**Nota para el proyecto**: En el proyecto, el escaneo es round-robin (1 fila por llamada cada 30ms), con debounce por muestreo (2 lecturas consecutivas). Ver `Teclado.ino`. Sin `Keypad.h`, sin `_delay_ms()`.
 
 ## Patrón USART TX+RX (1 referencia)
 
@@ -54,6 +62,8 @@
 | `PWM-Baja-Frecuencia.ino` | Timer5 Fast PWM, ICR5 como TOP, ADC → OCR5A |
 
 **Pines**: PL3(OC5A). **Frecuencia**: ICR5=15624 → ~1Hz con prescaler /1024.
+
+**Nota para el proyecto**: En el proyecto, el servomotor usa Timer1/OC1A (PB5), no Timer5/OC5A (PL3). Timer5 queda libre para otros usos. Ver `docs/12-pin-assignment.md`.
 
 ## Patrón Interrupción por Cambio (PCINT) (1 referencia)
 

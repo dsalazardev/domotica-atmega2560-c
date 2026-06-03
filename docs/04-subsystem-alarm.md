@@ -53,4 +53,4 @@ Esperar código de desactivación
 
 - Sensores de puerta/ventana: usar INT0-7 o PCINT para detección inmediata
 - Sensores de humo: polling periódico o PCINT según diseño
-- Debounce por software (delay de 20-50ms) para sensores reed
+- Debounce por software (temporización no-bloqueante con millis() de 20-50ms) para sensores reed

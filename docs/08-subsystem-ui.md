@@ -7,6 +7,8 @@
 - LCD 16x2 (Vishay LCD-016N002B-CFH-ET, controlador ST7066)
 - Teclado matricial 4x4
 - Conexión LCD en modo 4 bits: ahorra 4 pines del microcontrolador
+- Teclado sin Keypad.h: escaneo manual round-robin con millis(), debounce por muestreo
+- LCD sin delays: temporización non-blocking con NOPs + millis() + micros()
 
 ## Árbol de Menús
 
@@ -50,7 +52,7 @@ Pantalla de Inicio (bienvenida / estado)
 
 ## Mapeo de Teclado Matricial 4x4
 
-La matriz de teclas sigue el patrón de los códigos de clase:
+La matriz de teclas sigue el patrón de los códigos de clase. El proyecto implementa su propio escaneo sin `Keypad.h` ni delays, usando round-robin con temporización por `millis()`:
 
 ```
     Col0  Col1  Col2  Col3
@@ -85,6 +87,8 @@ F3:  '*'   '0'   '#'   'D'    ← Funciones especiales
 11. Enviar comando 0x01           → Clear display
 12. Esperar >2ms
 ```
+
+**Nota**: Todas las esperas de la secuencia de inicialización se implementan con `millis()` (≥1ms) o NOP loops (<1ms), no con `_delay_ms()` / `_delay_us()`.
 
 ## Funciones del Driver LCD
 

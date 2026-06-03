@@ -79,4 +79,4 @@
 | Puerta | Actuador | Control | Temporización |
 |---|---|---|---|
 | Principal | Imán (relé) | GPIO HIGH/LOW | 3 segundos (luego liberar) |
-| Garaje | Servomotor | PWM (Timer1 o Timer5) | Ángulo 0°→90°, esperar, 90°→0° |
+| Garaje | Servomotor | PWM (Timer1/OC1A en PB5) | Ángulo 0°→90°, esperar, 90°→0° |
