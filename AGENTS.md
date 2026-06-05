@@ -34,23 +34,15 @@ Sistema domótico para vivienda unifamiliar basado en ATmega2560 (Arduino Mega) 
   ├── 11-protocol-i2c.md            ← Referencia driver I2C
   ├── 12-pin-assignment.md          ← Asignación de pines
   └── 13-code-patterns.md           ← Patrones reutilizables
-/Proyecto/
-  ├── Proyecto.ino                  ← Punto de entrada (setup + loop)
-  ├── LCD.ino                       ← Driver LCD modo 4 bits
-  ├── Teclado.ino                   ← Escaneo teclado matricial 4x4
-  ├── Timer.ino                     ← Temporizadores no-bloqueantes
-  ├── Seguridad.ino                 ← Código y validación de seguridad
-  ├── Alarma.ino                    ← Lógica de alarma dual
-  ├── RFID.ino                      ← Lectura/escritura RFID via SPI
-  ├── Juegos.ino                    ← Cuota de usos habitación juegos
-  ├── Iluminacion.ino               ← Dimerización PWM
-  ├── Temperatura.ino               ← Sensor + control histéresis
-  ├── Horno.ino                     ← Horno remoto con cronómetro
-  ├── Sonido.ino                    ← Equipo de sonido + volumen
-  ├── ListaMercado.ino              ← Lista de mercado en EEPROM
-  ├── USART.ino                     ← Comunicación serial con PC
-  ├── Menu.ino                      ← Navegación del árbol de menús
-  └── platformio.ini                ← Config PlatformIO (desarrollo local)
+/Proyecto/                           ← Se comprime para entrega
+  ├── Proyecto.ino                  ← setup() + loop() con tick 50ms
+  ├── Drivers.ino                   ← LCD + Teclado + USART
+  ├── Timer.ino                     ← Timer5: tick 1ms, contadores
+  ├── Seguridad.ino                 ← Alarma + RFID + Juegos
+  ├── Ambiente.ino                  ← Iluminación + Temperatura + Horno + Sonido
+  ├── Lista.ino                     ← Lista de mercado
+  ├── platformio.ini                ← Config PlatformIO
+  └── CMakeLists.txt                ← Config CLion
 /DOCUMENTOS/                         ← Material de referencia
   ├── MARKDOWN/                     ← Notas y apuntes de clase
   ├── DOCUMENTACIÓN/                ← PDFs y PPTX originales
@@ -61,35 +53,16 @@ Sistema domótico para vivienda unifamiliar basado en ATmega2560 (Arduino Mega) 
 
 ## Source Files
 
-### Estructura actual (PlatformIO)
 | Archivo | Propósito | Estado |
 |---|---|---|
-| `Proyecto/src/main.ino` | Punto de entrada Arduino, loop principal | Esqueleto (loop vacío) |
-| `Proyecto/src/LCD.cpp` | Implementación driver LCD modo 4 bits | Funcional (usa delays — requiere migración a timer) |
-| `Proyecto/include/LCD.h` | Declaración driver LCD | Funcional |
-| `Proyecto/src/Seguridad.cpp` | Implementación subsistema seguridad | Esqueleto (solo include) |
-| `Proyecto/include/Seguridad.h` | Declaración clase Seguridad | Esqueleto (clase vacía) |
-| `Proyecto/platformio.ini` | Configuración PlatformIO | Completado |
-| `Proyecto/CMakeLists.txt` | Configuración CMake/CLion | Completado |
-
-### Estructura destino (Arduino IDE)
-| Archivo | Propósito | Estado |
-|---|---|---|
-| `Proyecto/Proyecto.ino` | Punto de entrada (setup + loop) | Por migrar |
-| `Proyecto/LCD.ino` | Driver LCD modo 4 bits | Por migrar |
-| `Proyecto/Teclado.ino` | Escaneo teclado matricial 4x4 | Por implementar |
-| `Proyecto/Timer.ino` | Temporizadores no-bloqueantes | Por implementar |
-| `Proyecto/Seguridad.ino` | Código y validación de seguridad | Por migrar |
-| `Proyecto/Alarma.ino` | Lógica de alarma dual | Por implementar |
-| `Proyecto/RFID.ino` | Lectura/escritura RFID via SPI | Por implementar |
-| `Proyecto/Juegos.ino` | Cuota de usos habitación juegos | Por implementar |
-| `Proyecto/Iluminacion.ino` | Dimerización PWM | Por implementar |
-| `Proyecto/Temperatura.ino` | Sensor + control histéresis | Por implementar |
-| `Proyecto/Horno.ino` | Horno remoto con cronómetro | Por implementar |
-| `Proyecto/Sonido.ino` | Equipo de sonido + volumen | Por implementar |
-| `Proyecto/ListaMercado.ino` | Lista de mercado en EEPROM | Por implementar |
-| `Proyecto/USART.ino` | Comunicación serial con PC | Por implementar |
-| `Proyecto/Menu.ino` | Navegación del árbol de menús | Por implementar |
+| `Proyecto/Proyecto.ino` | Punto de entrada (setup + loop con tick 50ms) | Funcional |
+| `Proyecto/Drivers.ino` | LCD 4-bit, teclado matricial, USART (sin delays) | Funcional |
+| `Proyecto/Timer.ino` | Timer5 CTC 1ms, contador tick | Funcional (usar Timer5, migrar de Timer1) |
+| `Proyecto/Seguridad.ino` | Alarma + código + RFID + juegos | Esqueleto |
+| `Proyecto/Ambiente.ino` | Iluminación + Temperatura + Horno + Sonido | Esqueleto |
+| `Proyecto/Lista.ino` | Lista de mercado en EEPROM | Esqueleto |
+| `Proyecto/platformio.ini` | Config PlatformIO | Completado |
+| `Proyecto/CMakeLists.txt` | Config CMake/CLion | Completado |
 
 ## Setup Commands
 
@@ -100,7 +73,7 @@ pio run --target upload    # Subir a Proteus
 pio device monitor         # Monitor serial (9600 baud)
 ```
 
-**Para revisión de la profesora**: abrir la carpeta `Proyecto/` en Arduino IDE. El archivo `Proyecto.ino` se reconoce automáticamente como sketch principal. Todos los `.ino` adicionales se cargan como pestañas del sketch.
+**Para revisión de la profesora**: comprimir la carpeta `Proyecto/` en `.rar` o `.zip`. Ella abre `Proyecto.ino` en Arduino IDE y ve las 6 pestañas (Proyecto, Drivers, Timer, Seguridad, Ambiente, Lista). Compila directo, sin instalar nada adicional.
 
 ## Restricciones de la Profesora (Nubia Liliana)
 
@@ -126,12 +99,71 @@ aplica a librerías externas adicionales como `Servo.h` o `Keypad.h`.
 ## Code Style & Conventions
 
 - Lenguaje: C++11 estándar
-- Archivos `.ino` planos (1 por subsistema), sin `.h`/`.cpp` separados
+- Archivos `.ino` planos agrupados por competencia, sin `.h`/`.cpp` separados
 - Comentarios en español (alineado con documentación y clases)
-- Funciones con prefijo de subsistema: `lcd_`, `seg_`, `teclado_`, `rfid_`, etc. — sin clases
+- Funciones con prefijo de subsistema: `lcd_`, `teclado_`, `usart_`, `alarma_`, `rfid_`, `juegos_`, `iluminacion_`, `temperatura_`, `horno_`, `sonido_`, `lista_` — sin clases
 - Constantes en `UPPER_SNAKE`
 - **Prohibido**: `class`, `_delay_ms()`, `_delay_us()`, `Servo.h`, `Keypad.h`, librerías externas
-- **Permitido**: `millis()`, `micros()`, timers hardware, NOP loops para pulsos finos, `<avr/io.h>`, `<stdint.h>`, core Arduino (`Serial`, `EEPROM`, etc.)
+- **Permitido**: `millis()`, `micros()`, timers hardware (Timer5 para tick, Timer1 para servo, Timer3 para iluminación), NOP loops para pulsos finos, `<avr/io.h>`, `<stdint.h>`, core Arduino (`Serial`, `EEPROM`, etc.)
+
+## Timer Allocation
+
+| Timer | Modo | Propósito | Pin | Referencia clase |
+|---|---|---|---|---|
+| **Timer5** | CTC | Tick 1ms (interrupción, `timer_tick++`) | — (solo ISR) | `PWM-Baja-Frecuencia.ino` (TCCR5, ICR5) |
+| **Timer1** | Fast PWM | Servomotor garaje (OC1A) | PB5 | `PWM-Baja-Frecuencia.ino` (adaptado) |
+| **Timer3** | Fast PWM | Iluminación dimerizada (OC3A) | PE3 | `PWM-Baja-Frecuencia.ino` (adaptado) |
+| Timer0 | — | Usado por `millis()`/`micros()` de Arduino | — | — |
+
+**Nota**: Timer5 se usa solo por su interrupción de comparación (CTC), no por su salida PWM. PL3 (OC5A) queda libre para TEC_FILA3 del teclado.
+
+## Implementation Plan
+
+| Orden | Archivo | Reglas | Funciones clave | Patrón de clase |
+|---|---|---|---|---|
+| 0 | `Timer.ino` | — | `timer_init()`, `ISR(TIMER5_COMPA_vect)` | `PWM-Baja-Frecuencia.ino` (cambiar modo a CTC) |
+| 1 | `Drivers.ino` | R18 | `lcd_*`, `teclado_*`, `usart_*` | `USART.ino`, `SPI-Maestro.ino` |
+| 2 | `Seguridad.ino` | R1-R11 | `alarma_*`, `rfid_*`, `juegos_*` | `USART.ino` (teclado + menú) |
+| 3 | `Lista.ino` | — | `lista_agregar`, `lista_eliminar`, `lista_obtener` | EEPROM (nuevo, ver `docs/07`) |
+| 4 | `Ambiente.ino` | R12-R17 | `iluminacion_dimerizar`, `temperatura_controlar`, `horno_*`, `sonido_*` | `PWM-Baja-Frecuencia.ino`, `USART.ino` |
+
+### Detalle por archivo
+
+**Drivers.ino** (R18)
+| Función | Origen | Timing |
+|---|---|---|
+| `lcd_pulso()` | NOP loop (~1us) | NOPs |
+| `lcd_nibble()` | Puerto → pulso | — |
+| `lcd_comando()` | RS bajo → nibble×2 | Tick: esperar 2ms no-bloqueante |
+| `lcd_dato()` | RS alto → nibble×2 | Tick: esperar 2ms no-bloqueante |
+| `lcd_init()` | Secuencia 4-bit | Tick: bloqueante en setup |
+| `teclado_scan()` | Filas/columnas | Tick: debounce 50ms |
+| `usart_transmit()` | UDR0 | — |
+
+**Seguridad.ino** (R1-R11)
+| Regla | Función | Descripción |
+|---|---|---|
+| R1 | `alarma_verificar_codigo()` | Valida código ingresado |
+| R2 | `alarma_activar()` / `alarma_desactivar()` | Activa/desactiva alarma dual |
+| R3-R7 | `rfid_enrolar()` / `rfid_borrar()` | Gestión de tarjetas RFID |
+| R8-R9 | `juegos_cargar_accesos()` / `juegos_consultar_saldo()` | Cuota habitación juegos |
+| R10-R11 | Control puerta (imán) / garaje (servo Timer1) | Actuadores |
+
+**Ambiente.ino** (R12-R17)
+| Regla | Función | Hardware |
+|---|---|---|
+| R12 | `iluminacion_dimerizar()` | Timer3/OC3A → PWM PE3 |
+| R13 | `temperatura_controlar()` | LM35 (ADC) + calefactor + ventilador |
+| R14-R15 | `horno_encender()` / `horno_apagar()` | Temporizador con Timer5 tick |
+| R16-R17 | `sonido_volumen()` | PWM+RC → señal analógica |
+
+**Lista.ino**
+| Función | Descripción |
+|---|---|
+| `lista_agregar()` | Añade producto + cantidad |
+| `lista_eliminar()` | Elimina por índice |
+| `lista_obtener()` | Consulta por índice |
+| `lista_vaciar()` | Limpia toda la lista |
 
 ## Business Rules Index
 
@@ -209,4 +241,4 @@ Las siguientes ambigüedades del enunciado requieren decisión antes de implemen
 8. **Documentar decisiones de diseño** a medida que se toman — actualizar `docs/` y `openspec/` según corresponda
 9. **Las Design Decisions Pending** requieren decisión explícita — no asumir valores por defecto
 10. **Recordar siempre las restricciones de la profesora** (ver sección "Restricciones de la Profesora" en este archivo) — sin Servo.h, sin Keypad.h, sin `_delay_*()`, estructura .ino plana
-11. **Estructura destino**: todo .ino plano en `Proyecto/`, sin `include/`, sin clases, sin archivos .cpp/.h separados
+11. **Estructura actual**: 6 archivos `.ino` planos en `Proyecto/` agrupados por competencia (Proyecto, Drivers, Timer, Seguridad, Ambiente, Lista), sin `include/`, sin clases, sin `.cpp/.h` separados
