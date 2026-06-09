@@ -11,20 +11,12 @@ static volatile uint8_t usart_rx_buf[USART_RX_BUF_SIZE];
 static volatile uint8_t usart_rx_head = 0;
 static volatile uint8_t usart_rx_tail = 0;
 
-#define LCD_RS PA0
-#define LCD_EN PA1
-#define LCD_D4 PA4
-#define LCD_D5 PA5
-#define LCD_D6 PA6
-#define LCD_D7 PA7
-
-#define LCD_DDR DDRA
-#define LCD_PORT PORTA
-
-#define LCD_DATA_MASK 0xF0
-#define LCD_RS_MASK (1 << LCD_RS)
-#define LCD_EN_MASK (1 << LCD_EN)
-#define LCD_MASK (LCD_DATA_MASK | LCD_RS_MASK | LCD_EN_MASK)
+#define LCD_RS 8
+#define LCD_EN 9
+#define LCD_D4 4
+#define LCD_D5 5
+#define LCD_D6 6
+#define LCD_D7 7
 
 #define LCD_CLEAR 0x01
 #define LCD_HOME 0x02
@@ -34,67 +26,62 @@ static volatile uint8_t usart_rx_tail = 0;
 
 static uint8_t lcd_fila = 0;
 static uint8_t lcd_columna = 0;
-static unsigned long lcd_ultimo_comando = 0;
 
-static void lcd_esperar(void) {
-    unsigned long inicio = millis();
-    while (millis() - inicio < 2);
+static void lcd_esperar_ms(uint16_t ms) {
+    unsigned long t = millis();
+    while (millis() - t < ms);
 }
 
-static void lcd_pulso(void) {
-    LCD_PORT |= LCD_EN_MASK;
-    __asm__ __volatile__(
-        "nop\n\t" "nop\n\t" "nop\n\t" "nop\n\t"
-        "nop\n\t" "nop\n\t" "nop\n\t" "nop\n\t"
-        "nop\n\t" "nop\n\t" "nop\n\t" "nop\n\t"
-        "nop\n\t" "nop\n\t" "nop\n\t" "nop\n\t"
-    );
-    LCD_PORT &= ~LCD_EN_MASK;
+static void lcd_nop_us(void) {
+    for (uint16_t i = 0; i < 200; i++) {
+        __asm__ __volatile__("nop\n\t");
+    }
 }
 
-static void lcd_nibble(uint8_t dato) {
-    LCD_PORT = (LCD_PORT & 0x0F) | ((dato & 0x0F) << 4);
-    lcd_pulso();
+static void lcd_enviar4Bits(uint8_t valor) {
+    digitalWrite(LCD_D4, bitRead(valor, 0));
+    digitalWrite(LCD_D5, bitRead(valor, 1));
+    digitalWrite(LCD_D6, bitRead(valor, 2));
+    digitalWrite(LCD_D7, bitRead(valor, 3));
+    digitalWrite(LCD_EN, HIGH);
+    lcd_nop_us();
+    digitalWrite(LCD_EN, LOW);
+    lcd_esperar_ms(1);
 }
 
 void lcd_comando(uint8_t cmd) {
-    lcd_esperar();
-    LCD_PORT &= ~LCD_RS_MASK;
-    lcd_nibble(cmd >> 4);
-    lcd_nibble(cmd);
-    lcd_ultimo_comando = millis();
+    digitalWrite(LCD_RS, LOW);
+    lcd_enviar4Bits(cmd >> 4);
+    lcd_enviar4Bits(cmd);
+    lcd_esperar_ms(2);
 }
 
 void lcd_dato(uint8_t dato) {
-    lcd_esperar();
-    LCD_PORT |= LCD_RS_MASK;
-    lcd_nibble(dato >> 4);
-    lcd_nibble(dato);
-    lcd_ultimo_comando = millis();
+    digitalWrite(LCD_RS, HIGH);
+    lcd_enviar4Bits(dato >> 4);
+    lcd_enviar4Bits(dato);
+    lcd_esperar_ms(2);
 }
 
 void lcd_init(void) {
-    LCD_DDR |= LCD_MASK;
-    LCD_PORT &= ~LCD_MASK;
+    pinMode(LCD_RS, OUTPUT); pinMode(LCD_EN, OUTPUT);
+    pinMode(LCD_D4, OUTPUT); pinMode(LCD_D5, OUTPUT);
+    pinMode(LCD_D6, OUTPUT); pinMode(LCD_D7, OUTPUT);
 
-    unsigned long t = millis();
-    while (millis() - t < 20);
+    lcd_esperar_ms(20);
 
-    lcd_nibble(0x03);
-    t = millis();
-    while (millis() - t < 5);
+    lcd_enviar4Bits(0x03); lcd_esperar_ms(5);
+    lcd_enviar4Bits(0x03); lcd_esperar_ms(1);
+    lcd_enviar4Bits(0x03);
+    lcd_enviar4Bits(0x02);
 
-    lcd_nibble(0x03);
-    t = millis();
-    while (millis() - t < 1);
+    lcd_comando(0x28);
+    lcd_comando(0x0C);
+    lcd_comando(0x01);
+    lcd_esperar_ms(2);
 
-    lcd_nibble(0x03);
-    lcd_nibble(0x02);
-
-    lcd_comando(LCD_FUNCTION_SET);
-    lcd_comando(LCD_DISPLAY_ON);
-    lcd_comando(LCD_ENTRY_MODE);
-    lcd_borrar();
+    lcd_fila = 0;
+    lcd_columna = 0;
 }
 
 void lcd_posicion(uint8_t fila, uint8_t col) {
@@ -107,7 +94,7 @@ void lcd_posicion(uint8_t fila, uint8_t col) {
 
 void lcd_borrar(void) {
     lcd_comando(LCD_CLEAR);
-    lcd_esperar();
+    lcd_esperar_ms(2);
     lcd_fila = 0;
     lcd_columna = 0;
     lcd_posicion(lcd_fila, lcd_columna);
@@ -149,9 +136,11 @@ void lcd_procesar(char dato) {
     }
 }
 
-#define KEY_PORT PORTK
-#define KEY_DDR  DDRK
-#define KEY_PIN  PINK
+#define KEY_ROW_PORT PORTL
+#define KEY_ROW_DDR  DDRL
+#define KEY_COL_PORT PORTK
+#define KEY_COL_DDR  DDRK
+#define KEY_COL_PIN  PINK
 
 static const char teclado_mapa[4][4] = {
     {'1', '2', '3', 'A'},
@@ -161,8 +150,10 @@ static const char teclado_mapa[4][4] = {
 };
 
 void teclado_init(void) {
-    KEY_DDR  = 0x0F;
-    KEY_PORT = 0xFF;
+    KEY_ROW_DDR |= 0x0F;
+    KEY_ROW_PORT = (KEY_ROW_PORT & 0xF0) | 0x0F;
+    KEY_COL_DDR &= ~0x0F;
+    KEY_COL_PORT |= 0x0F;
 }
 
 char teclado_scan(void) {
@@ -171,19 +162,19 @@ char teclado_scan(void) {
     ultimo_scan = millis();
 
     for (uint8_t f = 0; f < 4; f++) {
-        KEY_PORT = 0xFF & ~(1 << f);
+        KEY_ROW_PORT = (KEY_ROW_PORT & 0xF0) | (~(1 << f) & 0x0F);
         __asm__ __volatile__("nop\n\t" "nop\n\t" "nop\n\t" "nop\n\t"
                              "nop\n\t" "nop\n\t");
-        uint8_t col_bits = (KEY_PIN >> 4) & 0x0F;
+        uint8_t col_bits = KEY_COL_PIN & 0x0F;
         for (uint8_t c = 0; c < 4; c++) {
             if (!(col_bits & (1 << c))) {
                 char tecla = teclado_mapa[f][c];
-                KEY_PORT = 0xFF;
+                KEY_ROW_PORT = (KEY_ROW_PORT & 0xF0) | 0x0F;
                 return tecla;
             }
         }
     }
-    KEY_PORT = 0xFF;
+    KEY_ROW_PORT = (KEY_ROW_PORT & 0xF0) | 0x0F;
     return 0;
 }
 
@@ -382,6 +373,120 @@ ISR(USART0_RX_vect) {
         usart_rx_buf[usart_rx_head] = c;
         usart_rx_head = next;
     }
+}
+
+#define USART1_RX_BUF_SIZE 64
+static volatile uint8_t usart1_rx_buf[USART1_RX_BUF_SIZE];
+static volatile uint8_t usart1_rx_head = 0;
+static volatile uint8_t usart1_rx_tail = 0;
+
+void usart1_init(void) {
+    UBRR1H = 0;
+    UBRR1L = 104;
+    UCSR1B = (1 << RXEN1) | (1 << TXEN1) | (1 << RXCIE1);
+    UCSR1C = (1 << UCSZ11) | (1 << UCSZ10);
+}
+
+void usart1_transmit(uint8_t data) {
+    while (!(UCSR1A & (1 << UDRE1)));
+    UDR1 = data;
+}
+
+uint8_t usart1_leer(void) {
+    uint8_t c = 0;
+    cli();
+    if (usart1_rx_head != usart1_rx_tail) {
+        c = usart1_rx_buf[usart1_rx_tail];
+        usart1_rx_tail = (usart1_rx_tail + 1) % USART1_RX_BUF_SIZE;
+    }
+    sei();
+    return c;
+}
+
+uint8_t usart1_disponible(void) {
+    uint8_t disp;
+    cli();
+    disp = (usart1_rx_head - usart1_rx_tail) % USART1_RX_BUF_SIZE;
+    sei();
+    return disp;
+}
+
+void usart1_print(const char* s) {
+    while (pgm_read_byte(s)) {
+        usart1_transmit(pgm_read_byte(s++));
+    }
+}
+
+void usart1_puts(const char* s) {
+    while (*s) usart1_transmit(*s++);
+}
+
+ISR(USART1_RX_vect) {
+    uint8_t c = UDR1;
+    uint8_t next = (usart1_rx_head + 1) % USART1_RX_BUF_SIZE;
+    if (next != usart1_rx_tail) {
+        usart1_rx_buf[usart1_rx_head] = c;
+        usart1_rx_head = next;
+    }
+}
+
+#define USART2_RX_BUF_SIZE 64
+static volatile uint8_t usart2_rx_buf[USART2_RX_BUF_SIZE];
+static volatile uint8_t usart2_rx_head = 0;
+static volatile uint8_t usart2_rx_tail = 0;
+
+void usart2_init(void) {
+    UBRR2H = 0;
+    UBRR2L = 104;
+    UCSR2B = (1 << RXEN2) | (1 << TXEN2) | (1 << RXCIE2);
+    UCSR2C = (1 << UCSZ21) | (1 << UCSZ20);
+}
+
+void usart2_transmit(uint8_t data) {
+    while (!(UCSR2A & (1 << UDRE2)));
+    UDR2 = data;
+}
+
+uint8_t usart2_leer(void) {
+    uint8_t c = 0;
+    cli();
+    if (usart2_rx_head != usart2_rx_tail) {
+        c = usart2_rx_buf[usart2_rx_tail];
+        usart2_rx_tail = (usart2_rx_tail + 1) % USART2_RX_BUF_SIZE;
+    }
+    sei();
+    return c;
+}
+
+uint8_t usart2_disponible(void) {
+    uint8_t disp;
+    cli();
+    disp = (usart2_rx_head - usart2_rx_tail) % USART2_RX_BUF_SIZE;
+    sei();
+    return disp;
+}
+
+void usart2_print(const char* s) {
+    while (pgm_read_byte(s)) {
+        usart2_transmit(pgm_read_byte(s++));
+    }
+}
+
+void usart2_puts(const char* s) {
+    while (*s) usart2_transmit(*s++);
+}
+
+ISR(USART2_RX_vect) {
+    uint8_t c = UDR2;
+    uint8_t next = (usart2_rx_head + 1) % USART2_RX_BUF_SIZE;
+    if (next != usart2_rx_tail) {
+        usart2_rx_buf[usart2_rx_head] = c;
+        usart2_rx_head = next;
+    }
+}
+
+void usart_puts(const char* s) {
+    while (*s) usart_transmit(*s++);
 }
 
 void usart_print(const char* s) {

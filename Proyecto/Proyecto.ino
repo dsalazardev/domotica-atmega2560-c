@@ -23,16 +23,32 @@ typedef enum {
     MENU_JUEG_RECARGAR,
     MENU_JUEG_CONSULTAR,
     MENU_CODIGO_INPUT,
+    MENU_AMBIENTE,
+    MENU_AMB_ILUM,
+    MENU_AMB_TEMP,
+    MENU_AMB_HORNO,
+    MENU_AMB_SONIDO,
     MENU_MENSAJE
 } estado_menu_t;
 
 static estado_menu_t menu_estado = MENU_PRINCIPAL;
 static unsigned long menu_mensaje_hasta = 0;
+static estado_menu_t menu_volver_a = MENU_PRINCIPAL;
 static uint8_t menu_seleccion = 0;
 static uint8_t entrada_digitos[COD_DIGITOS];
 static uint8_t entrada_pos;
 static bool codigo_pendiente = false;
 static uint8_t menu_codigo_nuevo[COD_DIGITOS];
+
+typedef enum {
+    MAESTRO_OCIOSO,
+    MAESTRO_ESPERANDO_RESP
+} estado_maestro_t;
+
+static estado_maestro_t maestro_estado = MAESTRO_OCIOSO;
+static unsigned long maestro_tiempo_envio = 0;
+static char maestro_respuesta[48];
+static uint8_t maestro_resp_pos = 0;
 
 static void mostrar_numero(uint8_t n) {
     if (n >= 100) lcd_dato('0' + n / 100);
@@ -42,9 +58,10 @@ static void mostrar_numero(uint8_t n) {
     lcd_dato('0' + n % 10);
 }
 
-static void mostrar_mensaje(const char *msg, uint16_t duracion_ms) {
+static void mostrar_mensaje(const char *msg, uint16_t duracion_ms, estado_menu_t volver_a) {
     lcd_borrar();
     lcd_imprimir(msg);
+    menu_volver_a = volver_a;
     menu_estado = MENU_MENSAJE;
     menu_mensaje_hasta = millis() + duracion_ms;
 }
@@ -52,6 +69,8 @@ static void mostrar_mensaje(const char *msg, uint16_t duracion_ms) {
 static void menu_mostrar_principal(void) {
     lcd_borrar();
     lcd_imprimir("1.Seg 2.Acc 3.Jue");
+    lcd_posicion(1, 0);
+    lcd_imprimir("4.Amb");
 }
 
 static void menu_mostrar_seguridad(void) {
@@ -67,6 +86,46 @@ static void menu_mostrar_acceso(void) {
 static void menu_mostrar_juegos(void) {
     lcd_borrar();
     lcd_imprimir("1.Ing 2.Rec 3.Con");
+}
+
+static void menu_mostrar_ambiente(void) {
+    lcd_borrar();
+    lcd_imprimir("1.Ilum 2.Temp");
+    lcd_posicion(1, 0);
+    lcd_imprimir("3.Horn 4.Soni");
+}
+
+static void menu_mostrar_ilum(void) {
+    lcd_borrar();
+    lcd_imprimir("Nivel:");
+    uint8_t n = ilum_nivel_get();
+    lcd_posicion(1, 0);
+    for (uint8_t i = 0; i < n / 10; i++) lcd_dato('*');
+    for (uint8_t i = n / 10; i < 10; i++) lcd_dato('.');
+    mostrar_numero(n); lcd_imprimir("%");
+}
+
+static void menu_mostrar_temp(void) {
+    lcd_borrar();
+    lcd_imprimir("Temperatura:");
+    lcd_posicion(1, 0);
+    lcd_imprimir("   ");
+    mostrar_numero(temperatura_leer());
+    lcd_imprimir(" C");
+}
+
+static void menu_mostrar_horno(void) {
+    lcd_borrar();
+    if (horno_activo_get()) lcd_imprimir("Horno: ON");
+    else lcd_imprimir("Horno: OFF");
+    lcd_posicion(1, 0); lcd_imprimir("A=On B=Off D=Salir");
+}
+
+static void menu_mostrar_sonido(void) {
+    lcd_borrar();
+    if (sonido_activo_get()) lcd_imprimir("Sonido: ON");
+    else lcd_imprimir("Sonido: OFF");
+    lcd_posicion(1, 0); lcd_imprimir("A=On B=Off D=Salir");
 }
 
 static void menu_solicitar_codigo(const char *titulo) {
@@ -108,11 +167,23 @@ static bool menu_procesar_ingreso_codigo(char tecla) {
     return false;
 }
 
+static void menu_procesar_ambiente(char tecla) {
+    switch (tecla) {
+        case '1': menu_estado = MENU_AMB_ILUM; menu_mostrar_ilum(); break;
+        case '2': menu_estado = MENU_AMB_TEMP; menu_mostrar_temp(); break;
+        case '3': menu_estado = MENU_AMB_HORNO; menu_mostrar_horno(); break;
+        case '4': menu_estado = MENU_AMB_SONIDO; menu_mostrar_sonido(); break;
+        case 'B': menu_estado = MENU_PRINCIPAL; menu_mostrar_principal(); break;
+        default: break;
+    }
+}
+
 static void menu_procesar_main(char tecla) {
     switch (tecla) {
         case '1': menu_estado = MENU_SEGURIDAD; menu_mostrar_seguridad(); break;
         case '2': menu_estado = MENU_ACCESO; menu_mostrar_acceso(); break;
         case '3': menu_estado = MENU_JUEGOS; menu_mostrar_juegos(); break;
+        case '4': menu_estado = MENU_AMBIENTE; menu_mostrar_ambiente(); break;
         default: break;
     }
 }
@@ -132,14 +203,12 @@ static void menu_codigo_ingresado(void) {
     uint16_t cod = entrada_a_codigo();
     switch (menu_seleccion) {
         case 1:
-            if (alarma_verificar_codigo(cod)) { alarma_activar(); mostrar_mensaje("Alarma Activada", 2000); }
-            else { mostrar_mensaje("Codigo incorrecto", 2000); }
-            menu_estado = MENU_SEGURIDAD; menu_mostrar_seguridad();
+            if (alarma_verificar_codigo(cod)) { alarma_activar(); mostrar_mensaje("Alarma Activada", 2000, MENU_SEGURIDAD); }
+            else { mostrar_mensaje("Codigo incorrecto", 2000, MENU_SEGURIDAD); }
             break;
         case 2:
-            if (alarma_verificar_codigo(cod)) { alarma_desactivar(); mostrar_mensaje("Alarma Desactivada", 2000); }
-            else { mostrar_mensaje("Codigo incorrecto", 2000); }
-            menu_estado = MENU_SEGURIDAD; menu_mostrar_seguridad();
+            if (alarma_verificar_codigo(cod)) { alarma_desactivar(); mostrar_mensaje("Alarma Desactivada", 2000, MENU_SEGURIDAD); }
+            else { mostrar_mensaje("Codigo incorrecto", 2000, MENU_SEGURIDAD); }
             break;
         case 3:
             if (alarma_verificar_codigo(cod)) {
@@ -148,8 +217,7 @@ static void menu_codigo_ingresado(void) {
                 entrada_pos = 0;
                 for (uint8_t i = 0; i < COD_DIGITOS; i++) entrada_digitos[i] = 0;
             } else {
-                mostrar_mensaje("Cod actual incorrecto", 2000);
-                menu_estado = MENU_SEGURIDAD; menu_mostrar_seguridad();
+                mostrar_mensaje("Cod actual incorrecto", 2000, MENU_SEGURIDAD);
             }
             break;
         default:
@@ -178,11 +246,10 @@ static void menu_procesar_cambio_nuevo2(void) {
         for (uint8_t i = 0; i < COD_DIGITOS; i++) nuevo_cod = nuevo_cod * 10 + menu_codigo_nuevo[i];
         alarma_cambiar_codigo(nuevo_cod);
         lista_escribir_codigo(nuevo_cod);
-        mostrar_mensaje("Codigo cambiado", 2000);
+        mostrar_mensaje("Codigo cambiado", 2000, MENU_SEGURIDAD);
     } else {
-        mostrar_mensaje("Confirmacion fallida", 2000);
+        mostrar_mensaje("Confirmacion fallida", 2000, MENU_SEGURIDAD);
     }
-    menu_estado = MENU_SEGURIDAD; menu_mostrar_seguridad();
 }
 
 static void menu_procesar_acceso(char tecla) {
@@ -194,8 +261,7 @@ static void menu_procesar_acceso(char tecla) {
         case '2': {
             uint8_t cnt = rfid_get_conteo();
             if (cnt == 0) {
-                mostrar_mensaje("No hay tarjetas", 2000);
-                menu_estado = MENU_ACCESO; menu_mostrar_acceso();
+                mostrar_mensaje("No hay tarjetas", 2000, MENU_ACCESO);
             } else {
                 lcd_borrar(); lcd_imprimir("Sel tarjeta 1-9");
                 lcd_posicion(1, 0); lcd_imprimir("Cnt:"); lcd_dato('0' + cnt);
@@ -218,8 +284,7 @@ static void menu_procesar_acceso_puerta(char tecla) {
             lcd_borrar(); lcd_imprimir("PP=A GAR=B");
             menu_estado = MENU_ACC_PUERTA_SEL;
         } else {
-            mostrar_mensaje("Acceso denegado", 2000);
-            menu_estado = MENU_ACCESO; menu_mostrar_acceso();
+            mostrar_mensaje("Acceso denegado", 2000, MENU_ACCESO);
         }
     } else if (tecla == 'B') {
         menu_estado = MENU_ACCESO; menu_mostrar_acceso();
@@ -227,10 +292,9 @@ static void menu_procesar_acceso_puerta(char tecla) {
 }
 
 static void menu_procesar_puerta_sel(char tecla) {
-    if (tecla == 'A') { puerta_abrir_principal(); mostrar_mensaje("Puerta abierta", 2000); }
-    else if (tecla == 'B') { servo_abrir(); mostrar_mensaje("Garaje abierto", 2000); }
-    else { mostrar_mensaje("Op invalida", 1000); }
-    menu_estado = MENU_ACCESO; menu_mostrar_acceso();
+    if (tecla == 'A') { puerta_abrir_principal(); mostrar_mensaje("Puerta abierta", 2000, MENU_ACCESO); }
+    else if (tecla == 'B') { servo_abrir(); mostrar_mensaje("Garaje abierto", 2000, MENU_ACCESO); }
+    else { mostrar_mensaje("Op invalida", 1000, MENU_ACCESO); }
 }
 
 static void menu_procesar_borrar_sel(char tecla) {
@@ -238,11 +302,10 @@ static void menu_procesar_borrar_sel(char tecla) {
         uint8_t idx = tecla - '1';
         if (idx < rfid_get_conteo()) {
             rfid_borrar(idx);
-            mostrar_mensaje("Tarjeta eliminada", 2000);
+            mostrar_mensaje("Tarjeta eliminada", 2000, MENU_ACCESO);
         } else {
-            mostrar_mensaje("Indice invalido", 2000);
+            mostrar_mensaje("Indice invalido", 2000, MENU_ACCESO);
         }
-        menu_estado = MENU_ACCESO; menu_mostrar_acceso();
     } else if (tecla == 'B') {
         menu_estado = MENU_ACCESO; menu_mostrar_acceso();
     }
@@ -267,6 +330,40 @@ static void menu_procesar_juegos(char tecla) {
     }
 }
 
+static void menu_procesar_ilum(char tecla) {
+    if (tecla == 'A') { uint8_t n = ilum_nivel_get() + 10; if (n > 100) n = 100; iluminacion_dimerizar(n); menu_mostrar_ilum(); }
+    else if (tecla == 'B') { uint8_t n = ilum_nivel_get(); if (n >= 10) n -= 10; else n = 0; iluminacion_dimerizar(n); menu_mostrar_ilum(); }
+    else if (tecla == 'C') { iluminacion_dimerizar(0); menu_mostrar_ilum(); }
+    else if (tecla == 'D') { menu_estado = MENU_AMBIENTE; menu_mostrar_ambiente(); }
+    else if (tecla >= '0' && tecla <= '9') {
+        static uint8_t tmp = 0;
+        tmp = tmp * 10 + (tecla - '0');
+        if (tmp > 100) tmp = tecla - '0';
+        iluminacion_dimerizar(tmp);
+        if (tecla == '0' || tecla == '1') tmp = 0;
+        menu_mostrar_ilum();
+    }
+}
+
+static void menu_procesar_temp(char tecla) {
+    if (tecla == 'B') { menu_estado = MENU_AMBIENTE; menu_mostrar_ambiente(); }
+    else { menu_mostrar_temp(); }
+}
+
+static void menu_procesar_horno(char tecla) {
+    if (tecla == 'A') { horno_encender(60, 180); mostrar_mensaje("Horno encendido", 2000, MENU_AMB_HORNO); }
+    else if (tecla == 'B') { horno_apagar(); mostrar_mensaje("Horno apagado", 2000, MENU_AMB_HORNO); }
+    else if (tecla == 'D') { menu_estado = MENU_AMBIENTE; menu_mostrar_ambiente(); }
+    else { menu_mostrar_horno(); }
+}
+
+static void menu_procesar_sonido(char tecla) {
+    if (tecla == 'A') { sonido_encender(); sonido_volumen(50); mostrar_mensaje("Sonido ON", 2000, MENU_AMB_SONIDO); }
+    else if (tecla == 'B') { sonido_apagar(); mostrar_mensaje("Sonido OFF", 2000, MENU_AMB_SONIDO); }
+    else if (tecla == 'D') { menu_estado = MENU_AMBIENTE; menu_mostrar_ambiente(); }
+    else { menu_mostrar_sonido(); }
+}
+
 static void menu_procesar_juegos_recarga(void) {
     codigo_pendiente = false;
     uint16_t cod = entrada_a_codigo();
@@ -275,8 +372,7 @@ static void menu_procesar_juegos_recarga(void) {
         menu_seleccion = 11;
         menu_estado = MENU_JUEG_RECARGAR;
     } else {
-        mostrar_mensaje("Codigo incorrecto", 2000);
-        menu_estado = MENU_JUEGOS; menu_mostrar_juegos();
+        mostrar_mensaje("Codigo incorrecto", 2000, MENU_JUEGOS);
     }
 }
 
@@ -296,10 +392,23 @@ void menu_iniciar(void) {
     menu_mostrar_principal();
 }
 
+static const uint8_t RFID_UID_VALIDO[4] = {0x01, 0x02, 0x03, 0x04};
+static const uint8_t RFID_UID_INVALIDO[4] = {0xAB, 0xCD, 0xEF, 0x12};
+
 void menu_procesar_tecla(char tecla) {
     if (menu_estado == MENU_MENSAJE) {
-        if (millis() >= menu_mensaje_hasta) { menu_estado = MENU_PRINCIPAL; menu_mostrar_principal(); }
         return;
+    }
+
+    if (tecla == '*' && menu_estado != MENU_CODIGO_INPUT &&
+        menu_estado != MENU_SEG_CAMBIAR_COD_NUEVO1 &&
+        menu_estado != MENU_SEG_CAMBIAR_COD_NUEVO2) {
+        rfid_simular_tarjeta(RFID_UID_VALIDO);
+    }
+    if (tecla == '#' && menu_estado != MENU_CODIGO_INPUT &&
+        menu_estado != MENU_SEG_CAMBIAR_COD_NUEVO1 &&
+        menu_estado != MENU_SEG_CAMBIAR_COD_NUEVO2) {
+        rfid_simular_tarjeta(RFID_UID_INVALIDO);
     }
 
     if (menu_estado == MENU_CODIGO_INPUT) {
@@ -324,9 +433,8 @@ void menu_procesar_tecla(char tecla) {
 
     if (menu_estado == MENU_ACC_ENROLAR) {
         if (rfid_tarjeta_nueva()) {
-            if (rfid_enrolar(rfid_get_uid())) mostrar_mensaje("Persona enrolada", 2000);
-            else mostrar_mensaje("Tarjeta ya existe", 2000);
-            menu_estado = MENU_ACCESO; menu_mostrar_acceso();
+            if (rfid_enrolar(rfid_get_uid())) mostrar_mensaje("Persona enrolada", 2000, MENU_ACCESO);
+            else mostrar_mensaje("Tarjeta ya existe", 2000, MENU_ACCESO);
         } else if (tecla == 'B') { menu_estado = MENU_ACCESO; menu_mostrar_acceso(); }
         return;
     }
@@ -339,22 +447,22 @@ void menu_procesar_tecla(char tecla) {
         if (rfid_tarjeta_nueva()) {
             const uint8_t* uid = rfid_get_uid();
             if (!rfid_validar_uid(uid)) {
-                mostrar_mensaje("Acceso denegado", 2000);
+                mostrar_mensaje("Acceso denegado", 2000, MENU_JUEGOS);
             } else {
                 uint8_t saldo = juegos_consultar_saldo(uid);
                 if (saldo == 0) {
-                    mostrar_mensaje("Sin accesos. Pide a tus padres", 3000);
+                    mostrar_mensaje("Sin accesos. Pide a tus padres", 3000, MENU_JUEGOS);
                 } else {
                     juegos_descontar_acceso(uid);
                     lcd_borrar(); lcd_imprimir("Bienvenido!");
                     lcd_posicion(1, 0); lcd_imprimir("Te quedan ");
                     mostrar_numero(saldo - 1); lcd_imprimir(" usos");
+                    menu_volver_a = MENU_JUEGOS;
                     menu_mensaje_hasta = millis() + 3000;
                     menu_estado = MENU_MENSAJE;
                     puerta_abrir_principal();
                 }
             }
-            menu_estado = MENU_JUEGOS; menu_mostrar_juegos();
         } else if (tecla == 'B') { menu_estado = MENU_JUEGOS; menu_mostrar_juegos(); }
         return;
     }
@@ -375,15 +483,15 @@ void menu_procesar_tecla(char tecla) {
         if (rfid_tarjeta_nueva()) {
             const uint8_t* uid = rfid_get_uid();
             if (!rfid_validar_uid(uid)) {
-                mostrar_mensaje("Acceso denegado", 2000);
+                mostrar_mensaje("Acceso denegado", 2000, MENU_JUEGOS);
             } else {
                 uint8_t saldo = juegos_consultar_saldo(uid);
                 lcd_borrar(); lcd_imprimir("Saldo: ");
                 mostrar_numero(saldo); lcd_imprimir(" usos");
+                menu_volver_a = MENU_JUEGOS;
                 menu_mensaje_hasta = millis() + 3000;
                 menu_estado = MENU_MENSAJE;
             }
-            menu_estado = MENU_JUEGOS; menu_mostrar_juegos();
         } else if (tecla == 'B') { menu_estado = MENU_JUEGOS; menu_mostrar_juegos(); }
         return;
     }
@@ -393,6 +501,11 @@ void menu_procesar_tecla(char tecla) {
         case MENU_SEGURIDAD: menu_procesar_seguridad(tecla); break;
         case MENU_ACCESO: menu_procesar_acceso(tecla); break;
         case MENU_JUEGOS: menu_procesar_juegos(tecla); break;
+        case MENU_AMBIENTE: menu_procesar_ambiente(tecla); break;
+        case MENU_AMB_ILUM: menu_procesar_ilum(tecla); break;
+        case MENU_AMB_TEMP: menu_procesar_temp(tecla); break;
+        case MENU_AMB_HORNO: menu_procesar_horno(tecla); break;
+        case MENU_AMB_SONIDO: menu_procesar_sonido(tecla); break;
         default: break;
     }
 }
@@ -453,6 +566,10 @@ static void usart_envia_temp(void) {
 }
 
 static void procesar_comando(char* linea) {
+    char comando_orig[48];
+    strncpy(comando_orig, linea, sizeof(comando_orig) - 1);
+    comando_orig[sizeof(comando_orig) - 1] = '\0';
+
     char* tok = strtok(linea, " ");
     if (tok == NULL) return;
 
@@ -478,39 +595,9 @@ static void procesar_comando(char* linea) {
             usart_respuesta_error();
         }
     } else if (strcmp_P(tok, PSTR("HORNO")) == 0) {
-        tok = strtok(NULL, " ");
-        if (tok == NULL) { usart_respuesta_error(); return; }
-        if (strcmp_P(tok, PSTR("ON")) == 0) {
-            tok = strtok(NULL, " ");
-            if (tok == NULL) { usart_respuesta_error(); return; }
-            uint16_t temp = parse_uint16(tok);
-            tok = strtok(NULL, " ");
-            if (tok == NULL) { usart_respuesta_error(); return; }
-            uint16_t tsec = parse_uint16(tok);
-            horno_encender(tsec, temp);
-            usart_respuesta_ok(PSTR("horno encendido"));
-        } else if (strcmp_P(tok, PSTR("OFF")) == 0) {
-            horno_apagar();
-            usart_respuesta_ok(PSTR("horno apagado"));
-        } else {
-            usart_respuesta_error();
-        }
+        maestro_enviar_comando(comando_orig);
     } else if (strcmp_P(tok, PSTR("SONIDO")) == 0) {
-        tok = strtok(NULL, " ");
-        if (tok == NULL) { usart_respuesta_error(); return; }
-        if (strcmp_P(tok, PSTR("ON")) == 0) {
-            tok = strtok(NULL, " ");
-            if (tok == NULL) { usart_respuesta_error(); return; }
-            uint8_t vol = (uint8_t)parse_uint16(tok);
-            sonido_encender();
-            sonido_volumen(vol);
-            usart_respuesta_ok(PSTR("sonido encendido"));
-        } else if (strcmp_P(tok, PSTR("OFF")) == 0) {
-            sonido_apagar();
-            usart_respuesta_ok(PSTR("sonido apagado"));
-        } else {
-            usart_respuesta_error();
-        }
+        maestro_enviar_comando(comando_orig);
     } else if (strcmp_P(tok, PSTR("TEMP?")) == 0) {
         usart_envia_temp();
     } else if (strcmp_P(tok, PSTR("LISTA?")) == 0) {
@@ -555,10 +642,45 @@ static void procesar_comandos_usart(void) {
     }
 }
 
+static void maestro_enviar_comando(const char* cmd) {
+    usart1_puts(cmd);
+    usart1_transmit('\n');
+    maestro_estado = MAESTRO_ESPERANDO_RESP;
+    maestro_tiempo_envio = millis();
+    maestro_resp_pos = 0;
+}
+
+static void maestro_procesar_respuesta(void) {
+    if (maestro_estado != MAESTRO_ESPERANDO_RESP) return;
+
+    if (millis() - maestro_tiempo_envio >= 100) {
+        usart_respuesta_ok(PSTR("ERROR: timeout esclavo"));
+        maestro_estado = MAESTRO_OCIOSO;
+        return;
+    }
+
+    while (usart1_disponible() > 0) {
+        char c = usart1_leer();
+        if (c == '\n' || c == '\r') {
+            if (maestro_resp_pos > 0) {
+                maestro_respuesta[maestro_resp_pos] = '\0';
+                usart_print(PSTR("OK: esclavo="));
+                usart_puts(maestro_respuesta);
+                usart_transmit('\n');
+                maestro_estado = MAESTRO_OCIOSO;
+            }
+        } else if (maestro_resp_pos < sizeof(maestro_respuesta) - 1) {
+            maestro_respuesta[maestro_resp_pos++] = c;
+        }
+    }
+}
+
 void setup() {
     lcd_init();
     teclado_init();
     usart_init();
+    usart1_init();
+    usart2_init();
     timer_init();
     spi_master_init();
     alarma_init();
@@ -569,22 +691,45 @@ void setup() {
     menu_iniciar();
 }
 
+static void menu_volver(void) {
+    switch (menu_volver_a) {
+        case MENU_SEGURIDAD: menu_mostrar_seguridad(); break;
+        case MENU_ACCESO: menu_mostrar_acceso(); break;
+        case MENU_JUEGOS: menu_mostrar_juegos(); break;
+        case MENU_AMBIENTE: menu_mostrar_ambiente(); break;
+        case MENU_AMB_ILUM: menu_mostrar_ilum(); break;
+        case MENU_AMB_TEMP: menu_mostrar_temp(); break;
+        case MENU_AMB_HORNO: menu_mostrar_horno(); break;
+        case MENU_AMB_SONIDO: menu_mostrar_sonido(); break;
+        default: menu_mostrar_principal(); break;
+    }
+}
+
 void loop() {
-    static unsigned long ultimo_tick = 0;
     unsigned long ahora = millis();
 
-    procesar_comandos_usart();
+    if (menu_estado == MENU_MENSAJE && ahora >= menu_mensaje_hasta) {
+        menu_estado = menu_volver_a;
+        menu_volver();
+    }
 
+    procesar_comandos_usart();
+    maestro_procesar_respuesta();
+
+    static unsigned long ultimo_tick = 0;
     if (ahora - ultimo_tick >= 50) {
         ultimo_tick = ahora;
 
+        static char ultima_tecla = 0;
         char tecla = teclado_scan();
-        if (tecla != 0) {
+        if (tecla != 0 && tecla != ultima_tecla) {
             menu_procesar_tecla(tecla);
         }
+        ultima_tecla = tecla;
 
         alarma_actualizar();
         rfid_actualizar();
         ambiente_actualizar();
+        ambiente_slave_procesar();
     }
 }

@@ -14,12 +14,16 @@
 #endif
 
 #define SENSOR_DDR  DDRC
+#define SENSOR_PORT PORTC
 #define SENSOR_PIN  PINC
-#define SENSOR_PUERTA_PP   PC0
-#define SENSOR_PUERTA_GAR  PC1
+#define SENSOR_PUERTA_PP   PC7
+#define SENSOR_PUERTA_GAR  PC6
 #define SENSOR_VENTANA_SAL PC2
-#define SENSOR_VENTANA_COC PC3
-#define SENSOR_HUMO        PC4
+#define SENSOR_VENTANA_COC PC4
+
+#define ALARMA_LED_DDR  DDRC
+#define ALARMA_LED_PORT PORTC
+#define ALARMA_LED_PIN  PC3
 
 #define IMAN_DDR  DDRL
 #define IMAN_PORT PORTL
@@ -29,8 +33,8 @@
 #define SERVO_PORT PORTB
 #define SERVO_PIN  PB5
 #define SERVO_PWM_TOP 4999
-#define SERVO_0GRADOS 250
-#define SERVO_90GRADOS 375
+#define SERVO_0GRADOS 125
+#define SERVO_90GRADOS 2500
 
 typedef enum {
     EST_ALARMA_DESACTIVADA,
@@ -39,7 +43,7 @@ typedef enum {
 } estado_alarma_t;
 
 static estado_alarma_t alarma_estado = EST_ALARMA_DESACTIVADA;
-static bool alarma_sensor_prev[5];
+static bool alarma_sensor_prev[4];
 static unsigned long alarma_ultimo_poll = 0;
 static uint16_t codigo_actual;
 
@@ -128,9 +132,12 @@ static void puertas_actualizar(void) {
 void alarma_init(void) {
     alarma_estado = EST_ALARMA_DESACTIVADA;
     SENSOR_DDR &= ~((1 << SENSOR_PUERTA_PP) | (1 << SENSOR_PUERTA_GAR) |
-                    (1 << SENSOR_VENTANA_SAL) | (1 << SENSOR_VENTANA_COC) |
-                    (1 << SENSOR_HUMO));
-    for (uint8_t i = 0; i < 5; i++) {
+                    (1 << SENSOR_VENTANA_SAL) | (1 << SENSOR_VENTANA_COC));
+    SENSOR_PORT |= (1 << SENSOR_PUERTA_PP) | (1 << SENSOR_PUERTA_GAR) |
+                   (1 << SENSOR_VENTANA_SAL) | (1 << SENSOR_VENTANA_COC);
+    ALARMA_LED_DDR |= (1 << ALARMA_LED_PIN);
+    ALARMA_LED_PORT &= ~(1 << ALARMA_LED_PIN);
+    for (uint8_t i = 0; i < 4; i++) {
         alarma_sensor_prev[i] = true;
     }
     IMAN_DDR |= (1 << IMAN_PP);
@@ -153,10 +160,12 @@ void alarma_cambiar_codigo(uint16_t nuevo_codigo) {
 
 void alarma_activar(void) {
     alarma_estado = EST_ALARMA_ACTIVADA;
+    ALARMA_LED_PORT |= (1 << ALARMA_LED_PIN);
 }
 
 void alarma_desactivar(void) {
     alarma_estado = EST_ALARMA_DESACTIVADA;
+    ALARMA_LED_PORT &= ~(1 << ALARMA_LED_PIN);
 }
 
 bool alarma_activa(void) {
@@ -189,33 +198,28 @@ void alarma_actualizar(void) {
     if (ahora - alarma_ultimo_poll < 100) return;
     alarma_ultimo_poll = ahora;
 
-    bool sensor_disparado[5];
+    bool sensor_disparado[4];
     sensor_disparado[0] = !alarma_leer_sensor(SENSOR_PUERTA_PP);
     sensor_disparado[1] = !alarma_leer_sensor(SENSOR_PUERTA_GAR);
     sensor_disparado[2] = !alarma_leer_sensor(SENSOR_VENTANA_SAL);
     sensor_disparado[3] = !alarma_leer_sensor(SENSOR_VENTANA_COC);
-    sensor_disparado[4] =  alarma_leer_sensor(SENSOR_HUMO);
 
     if (alarma_estado == EST_ALARMA_ACTIVADA) {
-        for (uint8_t i = 0; i < 5; i++) {
+        for (uint8_t i = 0; i < 4; i++) {
             if (sensor_disparado[i] && !alarma_sensor_prev[i]) {
                 alarma_estado = EST_ALARMA_DISPARADA;
-                if (i == 4) {
-                    alarma_notificar("Humo en la vivienda");
-                } else {
-                    const char *lugar = "Intrusion en ventana";
-                    if (i == 0) lugar = "Intrusion en Puerta PP";
-                    else if (i == 1) lugar = "Intrusion en Puerta Gar";
-                    else if (i == 2) lugar = "Intrusion en Ventana Sala";
-                    else lugar = "Intrusion en Ventana Cocina";
-                    alarma_notificar(lugar);
-                }
+                const char *lugar = "Intrusion en ventana";
+                if (i == 0) lugar = "Intrusion en Puerta PP";
+                else if (i == 1) lugar = "Intrusion en Puerta Gar";
+                else if (i == 2) lugar = "Intrusion en Ventana Sala";
+                else lugar = "Intrusion en Ventana Cocina";
+                alarma_notificar(lugar);
                 break;
             }
         }
     }
 
-    for (uint8_t i = 0; i < 5; i++) {
+    for (uint8_t i = 0; i < 4; i++) {
         alarma_sensor_prev[i] = sensor_disparado[i];
     }
 
@@ -243,6 +247,10 @@ void rfid_init(void) {
     mfrc522_init();
     rfid_tarjeta_presente = false;
     rfid_tarjeta_anterior = false;
+    uint8_t cnt = lista_leer_conteo();
+    if (cnt == 0xFF || cnt > MAX_TARJETAS) {
+        lista_escribir_conteo(0);
+    }
 }
 
 bool rfid_validar_uid(const uint8_t *uid) {
@@ -271,6 +279,14 @@ bool rfid_borrar(uint8_t idx) {
     }
     lista_escribir_conteo(cnt - 1);
     return true;
+}
+
+void rfid_simular_tarjeta(const uint8_t *uid) {
+    rfid_tarjeta_anterior = false;
+    rfid_tarjeta_presente = true;
+    for (uint8_t i = 0; i < UID_LEN; i++) {
+        rfid_uid[i] = uid[i];
+    }
 }
 
 void rfid_actualizar(void) {
