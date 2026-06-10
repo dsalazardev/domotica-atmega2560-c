@@ -37,7 +37,7 @@
 #define SONIDO_PWM_PIN   PB4
 
 static unsigned long ultimo_poll_temp = 0;
-static uint8_t ilum_nivel_actual = 255;
+static uint8_t ilum_nivel_actual = 0;
 static uint8_t horno_activo = 0;
 static uint8_t horno_temp = 0;
 static unsigned long horno_timeout = 0;
