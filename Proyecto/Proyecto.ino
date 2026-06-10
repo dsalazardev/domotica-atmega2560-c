@@ -155,9 +155,8 @@ static void menu_mostrar_horno(void) {
     lcd_posicion(1, 0); lcd_imprimir("A=On B=Off D=Salir");
 }
 
-static void menu_mostrar_sonido(void) {
+static void menu_mostrar_sonido_valor(uint8_t n) {
     lcd_borrar();
-    uint8_t n = sonido_nivel_get();
     lcd_imprimir("Soni: ");
     if (n < 10) lcd_dato(' ');
     else lcd_dato('0' + n / 10);
@@ -166,6 +165,10 @@ static void menu_mostrar_sonido(void) {
     for (uint8_t i = 0; i < n / 10; i++) lcd_dato('*');
     lcd_posicion(1, 0);
     lcd_imprimir("A+10 B-10 C=0 D<");
+}
+
+static void menu_mostrar_sonido(void) {
+    menu_mostrar_sonido_valor(sonido_nivel_get());
 }
 
 static void menu_solicitar_codigo(const char *titulo) {
@@ -401,10 +404,19 @@ static void menu_procesar_horno(char tecla) {
 }
 
 static void menu_procesar_sonido(char tecla) {
-    if (tecla == 'A') { uint8_t n = sonido_nivel_get() + 10; if (n > 100) n = 100; sonido_set_volumen(n); menu_mostrar_sonido(); }
-    else if (tecla == 'B') { uint8_t n = sonido_nivel_get(); if (n >= 10) n -= 10; else n = 0; sonido_set_volumen(n); menu_mostrar_sonido(); }
-    else if (tecla == 'C') { sonido_set_volumen(0); menu_mostrar_sonido(); }
-    else if (tecla == 'D') { menu_estado = MENU_AMBIENTE; menu_mostrar_ambiente(); }
+    uint8_t n;
+    if (tecla == 'A') {
+        n = sonido_nivel_get(); if (n <= 90) n += 10; else n = 100;
+        menu_mostrar_sonido_valor(n);
+        sonido_set_volumen(n);
+    } else if (tecla == 'B') {
+        n = sonido_nivel_get(); if (n >= 10) n -= 10; else n = 0;
+        menu_mostrar_sonido_valor(n);
+        sonido_set_volumen(n);
+    } else if (tecla == 'C') {
+        menu_mostrar_sonido_valor(0);
+        sonido_set_volumen(0);
+    } else if (tecla == 'D') { menu_estado = MENU_AMBIENTE; menu_mostrar_ambiente(); }
     else { menu_mostrar_sonido(); }
 }
 

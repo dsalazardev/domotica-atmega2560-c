@@ -142,7 +142,7 @@ void sonido_set_volumen(uint8_t nivel) {
 
     SONIDO_PWM_DDR |= (1 << SONIDO_PWM_PIN);
     TCCR2A = (1 << COM2A1) | (1 << WGM21) | (1 << WGM20);
-    TCCR2B = (1 << CS20);
+    TCCR2B = (1 << CS21);
     OCR2A = (nivel * 255UL) / 100;
 }
 
