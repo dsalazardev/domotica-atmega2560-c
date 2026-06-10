@@ -385,6 +385,7 @@ void usart1_init(void) {
     UBRR1L = 104;
     UCSR1B = (1 << RXEN1) | (1 << TXEN1) | (1 << RXCIE1);
     UCSR1C = (1 << UCSZ11) | (1 << UCSZ10);
+    PORTD |= (1 << PD2);
 }
 
 void usart1_transmit(uint8_t data) {
@@ -438,8 +439,9 @@ static volatile uint8_t usart2_rx_tail = 0;
 void usart2_init(void) {
     UBRR2H = 0;
     UBRR2L = 104;
-    UCSR2B = (1 << RXEN2) | (1 << TXEN2) | (1 << RXCIE2);
+    UCSR2B = (1 << RXEN2) | (1 << RXCIE2);
     UCSR2C = (1 << UCSZ21) | (1 << UCSZ20);
+    DDRH &= ~(1 << PH1);
 }
 
 void usart2_transmit(uint8_t data) {
@@ -498,4 +500,60 @@ void usart_print(const char* s) {
 void usart_println(const char* s) {
     usart_print(s);
     usart_transmit('\n');
+}
+
+#define USART3_RX_BUF_SIZE 64
+static volatile uint8_t usart3_rx_buf[USART3_RX_BUF_SIZE];
+static volatile uint8_t usart3_rx_head = 0;
+static volatile uint8_t usart3_rx_tail = 0;
+
+void usart3_init(void) {
+    UBRR3H = 0;
+    UBRR3L = 104;
+    UCSR3B = (1 << RXEN3) | (1 << RXCIE3);
+    UCSR3C = (1 << UCSZ31) | (1 << UCSZ30);
+    DDRJ &= ~(1 << PJ1);
+}
+
+void usart3_transmit(uint8_t data) {
+    while (!(UCSR3A & (1 << UDRE3)));
+    UDR3 = data;
+}
+
+uint8_t usart3_leer(void) {
+    uint8_t c = 0;
+    cli();
+    if (usart3_rx_head != usart3_rx_tail) {
+        c = usart3_rx_buf[usart3_rx_tail];
+        usart3_rx_tail = (usart3_rx_tail + 1) % USART3_RX_BUF_SIZE;
+    }
+    sei();
+    return c;
+}
+
+uint8_t usart3_disponible(void) {
+    uint8_t disp;
+    cli();
+    disp = (usart3_rx_head - usart3_rx_tail) % USART3_RX_BUF_SIZE;
+    sei();
+    return disp;
+}
+
+void usart3_puts(const char* s) {
+    while (*s) usart3_transmit(*s++);
+}
+
+void usart3_print(const char* s) {
+    while (pgm_read_byte(s)) {
+        usart3_transmit(pgm_read_byte(s++));
+    }
+}
+
+ISR(USART3_RX_vect) {
+    uint8_t c = UDR3;
+    uint8_t next = (usart3_rx_head + 1) % USART3_RX_BUF_SIZE;
+    if (next != usart3_rx_tail) {
+        usart3_rx_buf[usart3_rx_head] = c;
+        usart3_rx_head = next;
+    }
 }

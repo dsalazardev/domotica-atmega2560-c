@@ -168,8 +168,11 @@ static char slave_linea[SLAVE_LINEA_BUF];
 static uint8_t slave_pos = 0;
 
 static void slave_enviar_respuesta(const char* msg) {
+    UCSR2B |= (1 << TXEN2);
     usart2_print(msg);
     usart2_transmit('\n');
+    UCSR2B &= ~(1 << TXEN2);
+    DDRH &= ~(1 << PH1);
 }
 
 static void slave_procesar_linea(char* linea) {
@@ -196,24 +199,6 @@ static void slave_procesar_linea(char* linea) {
         } else {
             slave_enviar_respuesta(PSTR("ERROR: comando horno invalido"));
         }
-    } else if (strcmp_P(tok, PSTR("SONIDO")) == 0) {
-        tok = strtok(NULL, " ");
-        if (tok == NULL) { slave_enviar_respuesta(PSTR("ERROR: comando invalido")); return; }
-        if (strcmp_P(tok, PSTR("ON")) == 0) {
-            tok = strtok(NULL, " ");
-            if (tok == NULL) { slave_enviar_respuesta(PSTR("ERROR: falta volumen")); return; }
-            uint8_t vol = 0;
-            while (*tok >= '0' && *tok <= '9') vol = vol * 10 + (*tok++ - '0');
-            sonido_set_volumen(vol);
-            slave_enviar_respuesta(PSTR("OK: sonido encendido"));
-        } else if (strcmp_P(tok, PSTR("OFF")) == 0) {
-            sonido_apagar();
-            slave_enviar_respuesta(PSTR("OK: sonido apagado"));
-        } else {
-            slave_enviar_respuesta(PSTR("ERROR: comando sonido invalido"));
-        }
-    } else {
-        slave_enviar_respuesta(PSTR("ERROR: comando desconocido"));
     }
 }
 
@@ -228,6 +213,56 @@ void ambiente_slave_procesar(void) {
             }
         } else if (slave_pos < SLAVE_LINEA_BUF - 1) {
             slave_linea[slave_pos++] = c;
+        }
+    }
+}
+
+#define SONIDO_SLAVE_BUF 48
+static char sonido_slave_linea[SONIDO_SLAVE_BUF];
+static uint8_t sonido_slave_pos = 0;
+
+static void sonido_slave_enviar_respuesta(const char* msg) {
+    UCSR3B |= (1 << TXEN3);
+    usart3_print(msg);
+    usart3_transmit('\n');
+    UCSR3B &= ~(1 << TXEN3);
+    DDRJ &= ~(1 << PJ1);
+}
+
+static void sonido_slave_procesar_linea(char* linea) {
+    char* tok = strtok(linea, " ");
+    if (tok == NULL) return;
+
+    if (strcmp_P(tok, PSTR("SONIDO")) == 0) {
+        tok = strtok(NULL, " ");
+        if (tok == NULL) { sonido_slave_enviar_respuesta(PSTR("ERROR: comando invalido")); return; }
+        if (strcmp_P(tok, PSTR("ON")) == 0) {
+            tok = strtok(NULL, " ");
+            if (tok == NULL) { sonido_slave_enviar_respuesta(PSTR("ERROR: falta volumen")); return; }
+            uint8_t vol = 0;
+            while (*tok >= '0' && *tok <= '9') vol = vol * 10 + (*tok++ - '0');
+            sonido_set_volumen(vol);
+            sonido_slave_enviar_respuesta(PSTR("OK: sonido encendido"));
+        } else if (strcmp_P(tok, PSTR("OFF")) == 0) {
+            sonido_apagar();
+            sonido_slave_enviar_respuesta(PSTR("OK: sonido apagado"));
+        } else {
+            sonido_slave_enviar_respuesta(PSTR("ERROR: comando sonido invalido"));
+        }
+    }
+}
+
+void sonido_slave_procesar(void) {
+    while (usart3_disponible() > 0) {
+        char c = usart3_leer();
+        if (c == '\n' || c == '\r') {
+            if (sonido_slave_pos > 0) {
+                sonido_slave_linea[sonido_slave_pos] = '\0';
+                sonido_slave_procesar_linea(sonido_slave_linea);
+                sonido_slave_pos = 0;
+            }
+        } else if (sonido_slave_pos < SONIDO_SLAVE_BUF - 1) {
+            sonido_slave_linea[sonido_slave_pos++] = c;
         }
     }
 }

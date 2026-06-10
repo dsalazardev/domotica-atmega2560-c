@@ -17,13 +17,13 @@
 | **R11** | Carga de accesos por padres | ✅ Completo | — |
 | **R12** | Iluminación dimerizada | ✅ Completo | — |
 | **R13** | Control temperatura (calefactor + ventilador) | ✅ Completo | — |
-| **R14** | Horno remoto con tiempo y temperatura | ⚠️ Sin loopback USART | Alta |
-| **R15** | Sonido remoto con control de volumen | ⚠️ Sin loopback USART | Alta |
+| **R14** | Horno remoto con tiempo y temperatura | ✅ Completo (esclavo USART2) | — |
+| **R15** | Sonido remoto con control de volumen | ✅ Completo (esclavo USART3) | — |
 | **R16** | Lista de mercado consultable remotamente | ✅ USART OK | — |
 | **R17** | Formato lista (producto + cantidad) | ✅ Completo | — |
 | **R18** | LCD como interfaz de visualización | ✅ Completo | — |
 
-### Completo: 14/18 | Parcial: 3/18 (R14, R15) | Pendiente: 1/18 (R1 humo)
+### Completo: 16/18 | Parcial: 0/18 | Pendiente: 2/18 (R1 humo)
 
 ---
 
@@ -53,35 +53,39 @@
 | 0.4 | Timer.ino | Timer5: prescaler `/64` para tick 1ms | Pendiente |
 | 0.5 | Seguridad.ino | `alarma_activa()` incluya DISPARADA | Pendiente |
 
-### FASE 1 — Loopback USART (Maestro-Esclavo)
+### FASE 1 — Loopback USART (1 Maestro + 2 Esclavos)
 
-**Objetivo**: cablear y probar la comunicación USART1 ↔ USART2 para comando remoto.
+**Objetivo**: cablear y probar la comunicación con 3 USARTs: maestro (USART1), esclavo HORNO (USART2), esclavo SONIDO (USART3).
 
 | Tarea | Descripción | Estado |
 |-------|-------------|--------|
-| 1.1 | **En Proteus**: conectar PD3 (USART1-TX) → PH0 (USART2-RX) | Pendiente |
-| 1.2 | **En Proteus**: conectar PH1 (USART2-TX) → PD2 (USART1-RX) | Pendiente |
-| 1.3 | Probar desde Virtual Terminal: `HORNO ON 180 30` debe responder con `OK: esclavo=OK: horno encendido` | Pendiente |
-| 1.4 | Probar: `SONIDO ON 50` debe responder `OK: esclavo=OK: sonido encendido` | Pendiente |
-| 1.5 | Probar: `SONIDO OFF` debe apagar sonido vía esclavo | Pendiente |
+| 1.1 | **En Proteus**: conectar PD3 (USART1-TX) → PH0 (USART2-RX) y PJ0 (USART3-RX) | ✅ Hecho |
+| 1.2 | **En Proteus**: conectar PH1 (USART2-TX) → PD2 (USART1-RX) | ✅ Hecho |
+| 1.3 | **En Proteus**: conectar PJ1 (USART3-TX) → PD2 (USART1-RX) | Pendiente |
+| 1.4 | Probar desde Virtual Terminal: `HORNO ON 180 30` → `OK: esclavo=OK: horno encendido` | Pendiente |
+| 1.5 | Probar: `SONIDO ON 50` → `OK: esclavo=OK: sonido encendido` | Pendiente |
 | 1.6 | Probar: `ESTADO?` debe mostrar alarma, horno, sonido, temp | Pendiente |
 | 1.7 | Probar: `TEMP?` debe mostrar temperatura actual | Pendiente |
 
 **Diagrama de conexión**:
 
 ```
-Maestro (USART1)           Esclavo (USART2)
-  PD3/TXD1 ─────────────→ PH0/RXD2
-  PD2/RXD1 ←───────────── PH1/TXD2
+Maestro (USART1)           Esclavo HORNO (USART2)    Esclavo SONIDO (USART3)
+  PD3/TXD1 ─────┬───────→ PH0/RXD2
+                └───────→ PJ0/RXD3
+  PD2/RXD1 ←──────────── PH1/TXD2
+  PD2/RXD1 ←──────────── PJ1/TXD3
 ```
 
 **Flujo de comando remoto**:
 
 ```
-PC (USART0) → Maestro → USART1-TX → USART2-RX → Esclavo
-                                                  → ejecuta acción
-                                                  → responde por USART2-TX
-PC (USART0) ← Maestro ← USART1-RX ← USART2-TX ← Esclavo
+PC (USART0) → Maestro
+              ├→ USART1-TX → USART2-RX → Esclavo HORNO (solo HORNO*)
+              │                             → responde por USART2-TX → USART1-RX
+              └→ USART1-TX → USART3-RX → Esclavo SONIDO (solo SONIDO*)
+                                            → responde por USART3-TX → USART1-RX
+PC (USART0) ← Maestro ← USART1-RX ← (respuesta del esclavo que procesó)
 ```
 
 ### FASE 2 — Sensor de Humo (R1)
@@ -140,6 +144,8 @@ Después de reasignar para incluir sensor de humo y liberar conflictos:
 | D9 | PH6/OC2B | LCD E | PH6 |
 | D10 | PB4/OC2A | SONIDO PWM (Timer2) | PB4 |
 | D11 | PB5/OC1A | SERVO GARAJE (Timer1) | PB5 |
+| D14 | PJ1/TXD3 | USART3 → USART1-RX (esclavo SONIDO) | PJ1 |
+| D15 | PJ0/RXD3 | USART3 ← USART1-TX (esclavo SONIDO) | PJ0 |
 | D30 | PC7 | SENSOR PUERTA PRINCIPAL (reed) | PC7 |
 | D31 | PC6 | SENSOR PUERTA GARAJE (reed) | PC6 |
 | D32 | PC5 | CALEFACTOR | PC5 |
@@ -167,7 +173,7 @@ Después de reasignar para incluir sensor de humo y liberar conflictos:
 - [ ] **Estructura plana .ino** — 6 pestañas en Arduino IDE
 - [ ] **Compila directo en Arduino IDE** — sin PlatformIO, sin librerías externas
 - [ ] **Comunicación serial** — USART0 con PC a 9600 baud
-- [ ] **Protocolo maestro-esclavo** — USART1 ↔ USART2 loopback
+- [ ] **1 Maestro + 2 Esclavos** — USART1 (maestro) ↔ USART2 (esclavo HORNO) + USART3 (esclavo SONIDO)
 - [ ] **Enrolamiento y borrado RFID** — menú + EEPROM
 - [ ] **Habitación juegos** — cuota, descuento, recarga por padres
 - [ ] **Control remoto** — horno y sonido desde PC

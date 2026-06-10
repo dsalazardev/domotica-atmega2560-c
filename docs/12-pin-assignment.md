@@ -30,8 +30,10 @@
 | PE1 (D1) | USART0_TX | PC | Transmisión USART PC |
 | PD2 (D19) | USART1_RX | USART1 | Loopback → USART2 (esclavo) |
 | PD3 (D18) | USART1_TX | USART1 | |
-| PH0 (D17) | USART2_RX | USART2 | Loopback desde USART1 (esclavo) |
-| PH1 (D16) | USART2_TX | USART2 | |
+| PH0 (D17) | USART2_RX | USART2 | Esclavo HORNO — recibe de USART1-TX |
+| PH1 (D16) | USART2_TX | USART2 | Responde al maestro USART1-RX |
+| PJ0 (D15) | USART3_RX | USART3 | Esclavo SONIDO — recibe de USART1-TX |
+| PJ1 (D14) | USART3_TX | USART3 | Responde al maestro USART1-RX |
 | PC5 (A6) | CALEFACTOR | Temperatura | Relé calefactor |
 | PC6 (A7) | VENTILADOR | Temperatura | Relé ventilador |
 | PC7 (A8) | HORNO_RELE | Horno | Relé horno |

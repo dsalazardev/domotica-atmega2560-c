@@ -68,7 +68,8 @@ static const char TECLA_LETRAS[10][5] = {
 
 typedef enum {
     MAESTRO_OCIOSO,
-    MAESTRO_ESPERANDO_RESP
+    MAESTRO_ESPERANDO_HORNO,
+    MAESTRO_ESPERANDO_SONIDO
 } estado_maestro_t;
 
 static estado_maestro_t maestro_estado = MAESTRO_OCIOSO;
@@ -784,7 +785,7 @@ static void procesar_comando(char* linea) {
     } else if (strcmp_P(tok, PSTR("HORNO")) == 0) {
         maestro_enviar_comando(comando_orig);
     } else if (strcmp_P(tok, PSTR("SONIDO")) == 0) {
-        maestro_enviar_comando(comando_orig);
+        maestro_enviar_comando_sonido(comando_orig);
     } else if (strcmp_P(tok, PSTR("TEMP?")) == 0) {
         usart_envia_temp();
     } else if (strcmp_P(tok, PSTR("LISTA?")) == 0) {
@@ -832,26 +833,34 @@ static void procesar_comandos_usart(void) {
 static void maestro_enviar_comando(const char* cmd) {
     usart1_puts(cmd);
     usart1_transmit('\n');
-    maestro_estado = MAESTRO_ESPERANDO_RESP;
+    maestro_estado = MAESTRO_ESPERANDO_HORNO;
+    maestro_tiempo_envio = millis();
+    maestro_resp_pos = 0;
+}
+
+static void maestro_enviar_comando_sonido(const char* cmd) {
+    usart1_puts(cmd);
+    usart1_transmit('\n');
+    maestro_estado = MAESTRO_ESPERANDO_SONIDO;
     maestro_tiempo_envio = millis();
     maestro_resp_pos = 0;
 }
 
 static void maestro_procesar_respuesta(void) {
-    if (maestro_estado != MAESTRO_ESPERANDO_RESP) return;
+    if (maestro_estado != MAESTRO_ESPERANDO_HORNO &&
+        maestro_estado != MAESTRO_ESPERANDO_SONIDO) return;
 
-    if (millis() - maestro_tiempo_envio >= 100) {
-        usart_respuesta_ok(PSTR("ERROR: timeout esclavo"));
-        maestro_estado = MAESTRO_OCIOSO;
-        return;
-    }
-
+    // 1. Leer bytes disponibles primero
     while (usart1_disponible() > 0) {
         char c = usart1_leer();
         if (c == '\n' || c == '\r') {
             if (maestro_resp_pos > 0) {
                 maestro_respuesta[maestro_resp_pos] = '\0';
-                usart_print(PSTR("OK: esclavo="));
+                if (maestro_estado == MAESTRO_ESPERANDO_HORNO) {
+                    usart_print(PSTR("OK: horno="));
+                } else {
+                    usart_print(PSTR("OK: sonido="));
+                }
                 usart_puts(maestro_respuesta);
                 usart_transmit('\n');
                 maestro_estado = MAESTRO_OCIOSO;
@@ -859,6 +868,27 @@ static void maestro_procesar_respuesta(void) {
         } else if (maestro_resp_pos < sizeof(maestro_respuesta) - 1) {
             maestro_respuesta[maestro_resp_pos++] = c;
         }
+    }
+
+    // 2. Timeout 1000ms
+    if (maestro_estado != MAESTRO_OCIOSO && millis() - maestro_tiempo_envio >= 1000) {
+        if (maestro_resp_pos > 0) {
+            maestro_respuesta[maestro_resp_pos] = '\0';
+            if (maestro_estado == MAESTRO_ESPERANDO_HORNO) {
+                usart_print(PSTR("OK: horno="));
+            } else {
+                usart_print(PSTR("OK: sonido="));
+            }
+            usart_puts(maestro_respuesta);
+            usart_transmit('\n');
+        } else {
+            if (maestro_estado == MAESTRO_ESPERANDO_HORNO) {
+                usart_respuesta_ok(PSTR("ERROR: timeout horno"));
+            } else {
+                usart_respuesta_ok(PSTR("ERROR: timeout sonido"));
+            }
+        }
+        maestro_estado = MAESTRO_OCIOSO;
     }
 }
 
@@ -868,6 +898,7 @@ void setup() {
     usart_init();
     usart1_init();
     usart2_init();
+    usart3_init();
     timer_init();
     spi_master_init();
     alarma_init();
@@ -902,7 +933,6 @@ void loop() {
     }
 
     procesar_comandos_usart();
-    maestro_procesar_respuesta();
 
     static unsigned long ultimo_tick = 0;
     if (ahora - ultimo_tick >= 50) {
@@ -919,5 +949,7 @@ void loop() {
         rfid_actualizar();
         ambiente_actualizar();
         ambiente_slave_procesar();
+        sonido_slave_procesar();
+        maestro_procesar_respuesta();
     }
 }
