@@ -28,6 +28,10 @@ typedef enum {
     MENU_AMB_TEMP,
     MENU_AMB_HORNO,
     MENU_AMB_SONIDO,
+    MENU_LISTA,
+    MENU_LISTA_AGREGAR_NOM,
+    MENU_LISTA_AGREGAR_CANT,
+    MENU_LISTA_VER,
     MENU_MENSAJE
 } estado_menu_t;
 
@@ -39,6 +43,28 @@ static uint8_t entrada_digitos[COD_DIGITOS];
 static uint8_t entrada_pos;
 static bool codigo_pendiente = false;
 static uint8_t menu_codigo_nuevo[COD_DIGITOS];
+
+static char lista_ingreso_buf[20];
+static uint8_t lista_ingreso_pos = 0;
+static char lista_ultimo_tecla_numerica = 0;
+static uint8_t lista_ultimo_ciclo = 0;
+static unsigned long lista_ultimo_tiempo = 0;
+static unsigned long lista_ciclo_ms = 800;
+static uint8_t lista_ver_idx = 0;
+static uint8_t lista_cantidad_val = 0;
+
+static const char TECLA_LETRAS[10][5] = {
+    {' ',0,0,0,0},
+    {'.',',','!','?','1'},
+    {'A','B','C','2',0},
+    {'D','E','F','3',0},
+    {'G','H','I','4',0},
+    {'J','K','L','5',0},
+    {'M','N','O','6',0},
+    {'P','Q','R','S','7'},
+    {'T','U','V','8',0},
+    {'W','X','Y','Z','9'}
+};
 
 typedef enum {
     MAESTRO_OCIOSO,
@@ -70,7 +96,7 @@ static void menu_mostrar_principal(void) {
     lcd_borrar();
     lcd_imprimir("1.Seg 2.Acc 3.Jue");
     lcd_posicion(1, 0);
-    lcd_imprimir("4.Amb");
+    lcd_imprimir("4.Amb 5.List");
 }
 
 static void menu_mostrar_seguridad(void) {
@@ -197,6 +223,7 @@ static void menu_procesar_main(char tecla) {
         case '2': menu_estado = MENU_ACCESO; menu_mostrar_acceso(); break;
         case '3': menu_estado = MENU_JUEGOS; menu_mostrar_juegos(); break;
         case '4': menu_estado = MENU_AMBIENTE; menu_mostrar_ambiente(); break;
+        case '5': menu_estado = MENU_LISTA; menu_mostrar_lista(); break;
         default: break;
     }
 }
@@ -380,6 +407,146 @@ static void menu_procesar_sonido(char tecla) {
     else { menu_mostrar_sonido(); }
 }
 
+static char lista_tecla_a_letra(char tecla) {
+    if (tecla >= '0' && tecla <= '9') {
+        uint8_t idx = tecla - '0';
+        unsigned long ahora = millis();
+        if (tecla == lista_ultimo_tecla_numerica && ahora - lista_ultimo_tiempo < lista_ciclo_ms) {
+            lista_ultimo_ciclo = (lista_ultimo_ciclo + 1) % 5;
+            while (TECLA_LETRAS[idx][lista_ultimo_ciclo] == 0) lista_ultimo_ciclo = (lista_ultimo_ciclo + 1) % 5;
+        } else {
+            lista_ultimo_ciclo = 0;
+        }
+        lista_ultimo_tecla_numerica = tecla;
+        lista_ultimo_tiempo = ahora;
+        return TECLA_LETRAS[idx][lista_ultimo_ciclo];
+    }
+    return 0;
+}
+
+static void menu_mostrar_lista(void) {
+    lcd_borrar();
+    lcd_imprimir("1.Agr 2.Ver 3.Vac");
+}
+
+static void menu_mostrar_lista_agregar_nom(void) {
+    lcd_borrar();
+    lcd_imprimir("Producto:");
+    lcd_posicion(1, 0);
+    for (uint8_t i = 0; i < lista_ingreso_pos; i++) lcd_dato(lista_ingreso_buf[i]);
+    if (lista_ingreso_pos < sizeof(lista_ingreso_buf)) {
+        lcd_dato('_');
+    }
+}
+
+static void menu_procesar_lista_agregar_nom(char tecla) {
+    unsigned long ahora = millis();
+    if (tecla >= '0' && tecla <= '9') {
+        if (tecla != lista_ultimo_tecla_numerica || ahora - lista_ultimo_tiempo >= lista_ciclo_ms) {
+            if (lista_ingreso_pos < sizeof(lista_ingreso_buf)) lista_ingreso_pos++;
+        }
+        char c = lista_tecla_a_letra(tecla);
+        if (lista_ingreso_pos > 0) lista_ingreso_buf[lista_ingreso_pos - 1] = c;
+        menu_mostrar_lista_agregar_nom();
+    } else if (tecla == '*' && lista_ingreso_pos > 0) {
+        lista_ingreso_pos--;
+        lista_ingreso_buf[lista_ingreso_pos] = ' ';
+        menu_mostrar_lista_agregar_nom();
+    } else if (tecla == 'D' && lista_ingreso_pos > 0) {
+        lista_ingreso_buf[lista_ingreso_pos] = '\0';
+        lista_ultimo_tecla_numerica = 0;
+        lcd_borrar(); lcd_imprimir("Cantidad:");
+        lcd_posicion(1, 0);
+        lista_cantidad_val = 0;
+        menu_estado = MENU_LISTA_AGREGAR_CANT;
+    } else if (tecla == 'B') {
+        lista_ingreso_pos = 0;
+        lista_ultimo_tecla_numerica = 0;
+        menu_estado = MENU_LISTA; menu_mostrar_lista();
+    }
+}
+
+static void menu_procesar_lista_agregar_cant(char tecla) {
+    if (tecla >= '0' && tecla <= '9') {
+        uint16_t tmp = (uint16_t)lista_cantidad_val * 10 + (tecla - '0');
+        if (tmp <= 255) lista_cantidad_val = (uint8_t)tmp;
+        lcd_posicion(1, 0);
+        lcd_borrar();
+        lcd_imprimir("Cantidad:");
+        lcd_posicion(1, 10);
+        if (lista_cantidad_val < 10) lcd_dato(' ');
+        lcd_dato('0' + lista_cantidad_val);
+    } else if (tecla == 'D' && lista_cantidad_val > 0) {
+        lista_agregar(lista_ingreso_buf, lista_cantidad_val);
+        mostrar_mensaje("Producto agregado!", 1500, MENU_LISTA);
+        lista_ingreso_pos = 0;
+        lista_cantidad_val = 0;
+        lista_ultimo_tecla_numerica = 0;
+    } else if (tecla == 'B') {
+        menu_estado = MENU_LISTA_AGREGAR_NOM;
+        menu_mostrar_lista_agregar_nom();
+    }
+}
+
+static void menu_mostrar_lista_ver(void) {
+    lcd_borrar();
+    uint8_t total = lista_total();
+    if (total == 0) {
+        lcd_imprimir("Lista vacia");
+        lcd_posicion(1, 0);
+        lcd_imprimir("D=Volver");
+        return;
+    }
+    if (lista_ver_idx >= total) lista_ver_idx = total - 1;
+    const char* nom = lista_obtener_nombre(lista_ver_idx);
+    uint8_t cant = lista_obtener_cantidad(lista_ver_idx);
+    lcd_imprimir(nom);
+    lcd_posicion(1, 0);
+    lcd_imprimir("Cant:");
+    mostrar_numero(cant);
+    lcd_imprimir(" ");
+    lcd_dato('0' + lista_ver_idx + 1);
+    lcd_dato('/');
+    lcd_dato('0' + total);
+}
+
+static void menu_procesar_lista_ver(char tecla) {
+    uint8_t total = lista_total();
+    if (total == 0) {
+        if (tecla == 'D') { menu_estado = MENU_LISTA; menu_mostrar_lista(); }
+        return;
+    }
+    if (tecla == 'A' && lista_ver_idx + 1 < total) { lista_ver_idx++; menu_mostrar_lista_ver(); }
+    else if (tecla == 'B' && lista_ver_idx > 0) { lista_ver_idx--; menu_mostrar_lista_ver(); }
+    else if (tecla == '*') {
+        lista_eliminar(lista_ver_idx);
+        if (lista_ver_idx >= lista_total() && lista_ver_idx > 0) lista_ver_idx--;
+        menu_mostrar_lista_ver();
+    } else if (tecla == 'D') { menu_estado = MENU_LISTA; menu_mostrar_lista(); }
+}
+
+static void menu_procesar_lista(char tecla) {
+    switch (tecla) {
+        case '1':
+            lista_ingreso_pos = 0;
+            lista_ultimo_tecla_numerica = 0;
+            menu_estado = MENU_LISTA_AGREGAR_NOM;
+            menu_mostrar_lista_agregar_nom();
+            break;
+        case '2':
+            lista_ver_idx = 0;
+            menu_estado = MENU_LISTA_VER;
+            menu_mostrar_lista_ver();
+            break;
+        case '3':
+            lista_vaciar();
+            mostrar_mensaje("Lista vaciada", 1500, MENU_LISTA);
+            break;
+        case 'B': menu_estado = MENU_PRINCIPAL; menu_mostrar_principal(); break;
+        default: break;
+    }
+}
+
 static void menu_procesar_juegos_recarga(void) {
     codigo_pendiente = false;
     uint16_t cod = entrada_a_codigo();
@@ -522,6 +689,10 @@ void menu_procesar_tecla(char tecla) {
         case MENU_AMB_TEMP: menu_procesar_temp(tecla); break;
         case MENU_AMB_HORNO: menu_procesar_horno(tecla); break;
         case MENU_AMB_SONIDO: menu_procesar_sonido(tecla); break;
+        case MENU_LISTA: menu_procesar_lista(tecla); break;
+        case MENU_LISTA_AGREGAR_NOM: menu_procesar_lista_agregar_nom(tecla); break;
+        case MENU_LISTA_AGREGAR_CANT: menu_procesar_lista_agregar_cant(tecla); break;
+        case MENU_LISTA_VER: menu_procesar_lista_ver(tecla); break;
         default: break;
     }
 }
@@ -717,6 +888,7 @@ static void menu_volver(void) {
         case MENU_AMB_TEMP: menu_mostrar_temp(); break;
         case MENU_AMB_HORNO: menu_mostrar_horno(); break;
         case MENU_AMB_SONIDO: menu_mostrar_sonido(); break;
+        case MENU_LISTA: menu_mostrar_lista(); break;
         default: menu_mostrar_principal(); break;
     }
 }

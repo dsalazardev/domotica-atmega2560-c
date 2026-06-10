@@ -21,6 +21,11 @@
 #define SENSOR_VENTANA_SAL PC2
 #define SENSOR_VENTANA_COC PC4
 
+#define HUMO_DDR  DDRL
+#define HUMO_PORT PORTL
+#define HUMO_PIN  PINL
+#define HUMO_BIT  PL6
+
 #define ALARMA_LED_DDR  DDRC
 #define ALARMA_LED_PORT PORTC
 #define ALARMA_LED_PIN  PC3
@@ -43,7 +48,7 @@ typedef enum {
 } estado_alarma_t;
 
 static estado_alarma_t alarma_estado = EST_ALARMA_DESACTIVADA;
-static bool alarma_sensor_prev[4];
+static bool alarma_sensor_prev[5];
 static unsigned long alarma_ultimo_poll = 0;
 static uint16_t codigo_actual;
 
@@ -135,9 +140,11 @@ void alarma_init(void) {
                     (1 << SENSOR_VENTANA_SAL) | (1 << SENSOR_VENTANA_COC));
     SENSOR_PORT |= (1 << SENSOR_PUERTA_PP) | (1 << SENSOR_PUERTA_GAR) |
                    (1 << SENSOR_VENTANA_SAL) | (1 << SENSOR_VENTANA_COC);
+    HUMO_DDR &= ~(1 << HUMO_BIT);
+    HUMO_PORT |= (1 << HUMO_BIT);
     ALARMA_LED_DDR |= (1 << ALARMA_LED_PIN);
     ALARMA_LED_PORT &= ~(1 << ALARMA_LED_PIN);
-    for (uint8_t i = 0; i < 4; i++) {
+    for (uint8_t i = 0; i < 5; i++) {
         alarma_sensor_prev[i] = true;
     }
     IMAN_DDR |= (1 << IMAN_PP);
@@ -169,7 +176,7 @@ void alarma_desactivar(void) {
 }
 
 bool alarma_activa(void) {
-    return alarma_estado == EST_ALARMA_ACTIVADA;
+    return alarma_estado == EST_ALARMA_ACTIVADA || alarma_estado == EST_ALARMA_DISPARADA;
 }
 
 static void alarma_notificar(const char *texto) {
@@ -198,28 +205,30 @@ void alarma_actualizar(void) {
     if (ahora - alarma_ultimo_poll < 100) return;
     alarma_ultimo_poll = ahora;
 
-    bool sensor_disparado[4];
+    bool sensor_disparado[5];
     sensor_disparado[0] = !alarma_leer_sensor(SENSOR_PUERTA_PP);
     sensor_disparado[1] = !alarma_leer_sensor(SENSOR_PUERTA_GAR);
     sensor_disparado[2] = !alarma_leer_sensor(SENSOR_VENTANA_SAL);
     sensor_disparado[3] = !alarma_leer_sensor(SENSOR_VENTANA_COC);
+    sensor_disparado[4] = !(HUMO_PIN & (1 << HUMO_BIT));
 
     if (alarma_estado == EST_ALARMA_ACTIVADA) {
-        for (uint8_t i = 0; i < 4; i++) {
+        for (uint8_t i = 0; i < 5; i++) {
             if (sensor_disparado[i] && !alarma_sensor_prev[i]) {
                 alarma_estado = EST_ALARMA_DISPARADA;
                 const char *lugar = "Intrusion en ventana";
                 if (i == 0) lugar = "Intrusion en Puerta PP";
                 else if (i == 1) lugar = "Intrusion en Puerta Gar";
                 else if (i == 2) lugar = "Intrusion en Ventana Sala";
-                else lugar = "Intrusion en Ventana Cocina";
+                else if (i == 3) lugar = "Intrusion en Ventana Cocina";
+                else lugar = "Humo en la vivienda";
                 alarma_notificar(lugar);
                 break;
             }
         }
     }
 
-    for (uint8_t i = 0; i < 4; i++) {
+    for (uint8_t i = 0; i < 5; i++) {
         alarma_sensor_prev[i] = sensor_disparado[i];
     }
 
