@@ -934,6 +934,8 @@ void loop() {
 
     procesar_comandos_usart();
 
+    alarma_buzzer_sonar();
+
     static unsigned long ultimo_tick = 0;
     if (ahora - ultimo_tick >= 50) {
         ultimo_tick = ahora;

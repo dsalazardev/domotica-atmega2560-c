@@ -30,6 +30,10 @@
 #define ALARMA_LED_PORT PORTC
 #define ALARMA_LED_PIN  PC3
 
+#define BUZZER_DDR  DDRD
+#define BUZZER_PORT PORTD
+#define BUZZER_PIN  PD7
+
 #define IMAN_DDR  DDRL
 #define IMAN_PORT PORTL
 #define IMAN_PP   PL4
@@ -144,6 +148,8 @@ void alarma_init(void) {
     HUMO_PORT |= (1 << HUMO_BIT);
     ALARMA_LED_DDR |= (1 << ALARMA_LED_PIN);
     ALARMA_LED_PORT &= ~(1 << ALARMA_LED_PIN);
+    BUZZER_DDR |= (1 << BUZZER_PIN);
+    BUZZER_PORT &= ~(1 << BUZZER_PIN);
     for (uint8_t i = 0; i < 5; i++) {
         alarma_sensor_prev[i] = true;
     }
@@ -173,6 +179,7 @@ void alarma_activar(void) {
 void alarma_desactivar(void) {
     alarma_estado = EST_ALARMA_DESACTIVADA;
     ALARMA_LED_PORT &= ~(1 << ALARMA_LED_PIN);
+    BUZZER_PORT &= ~(1 << BUZZER_PIN);
 }
 
 bool alarma_activa(void) {
@@ -216,6 +223,7 @@ void alarma_actualizar(void) {
         for (uint8_t i = 0; i < 5; i++) {
             if (sensor_disparado[i] && !alarma_sensor_prev[i]) {
                 alarma_estado = EST_ALARMA_DISPARADA;
+                ALARMA_LED_PORT &= ~(1 << ALARMA_LED_PIN);
                 const char *lugar = "Intrusion en ventana";
                 if (i == 0) lugar = "Intrusion en Puerta PP";
                 else if (i == 1) lugar = "Intrusion en Puerta Gar";
@@ -233,6 +241,25 @@ void alarma_actualizar(void) {
     }
 
     puertas_actualizar();
+
+    if (alarma_estado == EST_ALARMA_DISPARADA) {
+        static unsigned long ultimo_led = 0;
+        if (ahora - ultimo_led >= 200) {
+            ultimo_led = ahora;
+            ALARMA_LED_PORT ^= (1 << ALARMA_LED_PIN);
+        }
+    }
+}
+
+void alarma_buzzer_sonar(void) {
+    if (alarma_estado == EST_ALARMA_DISPARADA) {
+        static unsigned long ultimo = 0;
+        unsigned long ahora = micros();
+        if (ahora - ultimo >= 500) {
+            ultimo = ahora;
+            BUZZER_PORT ^= (1 << BUZZER_PIN);
+        }
+    }
 }
 
 static bool rfid_uid_igual(const uint8_t *a, const uint8_t *b) {

@@ -26,6 +26,7 @@
 | PB4 (D10) | SONIDO_PWM | Sonido | OC2A, PWM+RC → señal analógica (Timer2) |
 | PL5 (D44) | SONIDO_RELE | Sonido | Relé encendido equipo de sonido |
 | PE4 (D2) | ILUM_PWM | Iluminación | OC3B, PWM dimerización (Timer3, Fast PWM) |
+| PD7 (D38) | ALARMA_BUZZER | Alarma | Buzzer piezoeléctrico (toggle 1kHz en disparo) |
 | PE0 (D0) | USART0_RX | PC | Recepción USART PC |
 | PE1 (D1) | USART0_TX | PC | Transmisión USART PC |
 | PD2 (D19) | USART1_RX | USART1 | Loopback → USART2 (esclavo) |
