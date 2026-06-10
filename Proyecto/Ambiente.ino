@@ -28,10 +28,13 @@
 #define HORNO_PORT PORTC
 #define HORNO_PIN  PC0
 
-#define SONIDO_DDR     DDRB
-#define SONIDO_PORT    PORTB
-#define SONIDO_RELE_PIN PL5
-#define SONIDO_PWM_PIN  PB4
+#define SONIDO_RELE_DDR  DDRL
+#define SONIDO_RELE_PORT PORTL
+#define SONIDO_RELE_PIN  PL5
+
+#define SONIDO_PWM_DDR   DDRB
+#define SONIDO_PWM_PORT  PORTB
+#define SONIDO_PWM_PIN   PB4
 
 static unsigned long ultimo_poll_temp = 0;
 static uint8_t ilum_nivel_actual = 255;
@@ -40,10 +43,12 @@ static uint8_t horno_temp = 0;
 static unsigned long horno_timeout = 0;
 static uint8_t sonido_activo = 0;
 static uint8_t temperatura_actual = 25;
+static uint8_t sonido_nivel_actual = 0;
 
 uint8_t temperatura_leer(void) { return temperatura_actual; }
 
 uint8_t horno_activo_get(void) { return horno_activo; }
+uint8_t sonido_nivel_get(void) { return sonido_nivel_actual; }
 uint8_t sonido_activo_get(void) { return sonido_activo; }
 
 void iluminacion_iniciar(void) {
@@ -64,7 +69,7 @@ void iluminacion_dimerizar(uint8_t nivel) {
     ilum_nivel_actual = nivel;
 }
 
-static uint16_t adc_leer(uint8_t canal) {
+uint16_t adc_leer(uint8_t canal) {
     ADMUX = (1 << REFS0) | (canal & 0x07);
     ADCSRA |= (1 << ADSC);
     unsigned long t = millis();
@@ -75,8 +80,6 @@ static uint16_t adc_leer(uint8_t canal) {
 }
 
 void temperatura_iniciar(void) {
-    ADMUX = (1 << REFS0) | TEMP_ADC_CH;
-    ADCSRA = (1 << ADEN) | (1 << ADPS2) | (1 << ADPS1) | (1 << ADPS0);
     CALEFACTOR_DDR |= (1 << CALEFACTOR_PIN);
     VENTILADOR_DDR |= (1 << VENTILADOR_PIN);
     CALEFACTOR_PORT &= ~(1 << CALEFACTOR_PIN);
@@ -84,17 +87,22 @@ void temperatura_iniciar(void) {
 }
 
 static void temperatura_controlar(void) {
-    uint16_t adc_val = adc_leer(TEMP_ADC_CH);
-    uint8_t temp_c = (adc_val * 500UL) / 1024;
-    temperatura_actual = temp_c;
+    uint8_t t = temperatura_actual;
 
-    if (temp_c < TEMP_SETPOINT - TEMP_HISTERESIS) {
+    if (t < TEMP_SETPOINT - TEMP_HISTERESIS) {
         CALEFACTOR_PORT |= (1 << CALEFACTOR_PIN);
         VENTILADOR_PORT &= ~(1 << VENTILADOR_PIN);
-    } else if (temp_c > TEMP_SETPOINT + TEMP_HISTERESIS) {
+    } else if (t > TEMP_SETPOINT + TEMP_HISTERESIS) {
         CALEFACTOR_PORT &= ~(1 << CALEFACTOR_PIN);
         VENTILADOR_PORT |= (1 << VENTILADOR_PIN);
     }
+}
+
+void temperatura_ajustar(int8_t delta) {
+    int16_t nueva = (int16_t)temperatura_actual + delta;
+    if (nueva > 99) nueva = 99;
+    if (nueva < 0) nueva = 0;
+    temperatura_actual = (uint8_t)nueva;
 }
 
 void horno_encender(uint16_t tiempo_seg, uint8_t temp) {
@@ -110,26 +118,36 @@ void horno_apagar(void) {
     HORNO_PORT &= ~(1 << HORNO_PIN);
 }
 
-void sonido_encender(void) {
-    sonido_activo = 1;
-    SONIDO_DDR |= (1 << SONIDO_RELE_PIN) | (1 << SONIDO_PWM_PIN);
-    SONIDO_PORT |= (1 << SONIDO_RELE_PIN);
+void sonido_set_volumen(uint8_t nivel) {
+    if (nivel > 100) nivel = 100;
 
+    if (nivel == 0) {
+        sonido_activo = 0;
+        sonido_nivel_actual = 0;
+        TCCR2A &= ~((1 << COM2A1) | (1 << COM2A0));
+        TCCR2B = 0;
+        OCR2A = 0;
+        SONIDO_RELE_PORT &= ~(1 << SONIDO_RELE_PIN);
+        SONIDO_RELE_DDR |= (1 << SONIDO_RELE_PIN);
+        SONIDO_PWM_PORT &= ~(1 << SONIDO_PWM_PIN);
+        SONIDO_PWM_DDR |= (1 << SONIDO_PWM_PIN);
+        return;
+    }
+
+    sonido_activo = 1;
+    sonido_nivel_actual = nivel;
+
+    SONIDO_RELE_DDR |= (1 << SONIDO_RELE_PIN);
+    SONIDO_RELE_PORT |= (1 << SONIDO_RELE_PIN);
+
+    SONIDO_PWM_DDR |= (1 << SONIDO_PWM_PIN);
     TCCR2A = (1 << COM2A1) | (1 << WGM21) | (1 << WGM20);
     TCCR2B = (1 << CS20);
-    OCR2A = 0;
+    OCR2A = (nivel * 255UL) / 100;
 }
 
 void sonido_apagar(void) {
-    sonido_activo = 0;
-    TCCR2B = 0;
-    OCR2A = 0;
-    SONIDO_PORT &= ~(1 << SONIDO_RELE_PIN);
-}
-
-void sonido_volumen(uint8_t nivel) {
-    if (nivel > 100) nivel = 100;
-    OCR2A = (nivel * 255UL) / 100;
+    sonido_set_volumen(0);
 }
 
 void ambiente_actualizar(void) {
@@ -186,8 +204,7 @@ static void slave_procesar_linea(char* linea) {
             if (tok == NULL) { slave_enviar_respuesta(PSTR("ERROR: falta volumen")); return; }
             uint8_t vol = 0;
             while (*tok >= '0' && *tok <= '9') vol = vol * 10 + (*tok++ - '0');
-            sonido_encender();
-            sonido_volumen(vol);
+            sonido_set_volumen(vol);
             slave_enviar_respuesta(PSTR("OK: sonido encendido"));
         } else if (strcmp_P(tok, PSTR("OFF")) == 0) {
             sonido_apagar();

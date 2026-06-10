@@ -97,21 +97,28 @@ static void menu_mostrar_ambiente(void) {
 
 static void menu_mostrar_ilum(void) {
     lcd_borrar();
-    lcd_imprimir("Nivel:");
     uint8_t n = ilum_nivel_get();
-    lcd_posicion(1, 0);
+    lcd_imprimir("Ilum: ");
+    if (n < 10) lcd_dato(' ');
+    else lcd_dato('0' + n / 10);
+    lcd_dato('0' + n % 10);
+    lcd_imprimir("%  ");
     for (uint8_t i = 0; i < n / 10; i++) lcd_dato('*');
-    for (uint8_t i = n / 10; i < 10; i++) lcd_dato('.');
-    mostrar_numero(n); lcd_imprimir("%");
+    lcd_posicion(1, 0);
+    lcd_imprimir("A+10 B-10 C=0 D<");
 }
 
 static void menu_mostrar_temp(void) {
     lcd_borrar();
-    lcd_imprimir("Temperatura:");
+    uint8_t t = temperatura_leer();
+    lcd_imprimir("TEMP:");
+    if (t < 10) lcd_dato(' ');
+    lcd_dato('0' + t / 10 % 10);
+    lcd_dato('0' + t % 10);
+    lcd_imprimir("C");
     lcd_posicion(1, 0);
-    lcd_imprimir("   ");
-    mostrar_numero(temperatura_leer());
-    lcd_imprimir(" C");
+    for (uint8_t i = 0; i < t / 4; i++) lcd_dato('*');
+    lcd_imprimir(" A+1 B-1 D<");
 }
 
 static void menu_mostrar_horno(void) {
@@ -123,9 +130,15 @@ static void menu_mostrar_horno(void) {
 
 static void menu_mostrar_sonido(void) {
     lcd_borrar();
-    if (sonido_activo_get()) lcd_imprimir("Sonido: ON");
-    else lcd_imprimir("Sonido: OFF");
-    lcd_posicion(1, 0); lcd_imprimir("A=On B=Off D=Salir");
+    uint8_t n = sonido_nivel_get();
+    lcd_imprimir("Soni: ");
+    if (n < 10) lcd_dato(' ');
+    else lcd_dato('0' + n / 10);
+    lcd_dato('0' + n % 10);
+    lcd_imprimir("%  ");
+    for (uint8_t i = 0; i < n / 10; i++) lcd_dato('*');
+    lcd_posicion(1, 0);
+    lcd_imprimir("A+10 B-10 C=0 D<");
 }
 
 static void menu_solicitar_codigo(const char *titulo) {
@@ -346,20 +359,23 @@ static void menu_procesar_ilum(char tecla) {
 }
 
 static void menu_procesar_temp(char tecla) {
-    if (tecla == 'B') { menu_estado = MENU_AMBIENTE; menu_mostrar_ambiente(); }
+    if (tecla == 'A') { temperatura_ajustar(1); menu_mostrar_temp(); }
+    else if (tecla == 'B') { temperatura_ajustar(-1); menu_mostrar_temp(); }
+    else if (tecla == 'D') { menu_estado = MENU_AMBIENTE; menu_mostrar_ambiente(); }
     else { menu_mostrar_temp(); }
 }
 
 static void menu_procesar_horno(char tecla) {
-    if (tecla == 'A') { horno_encender(60, 180); mostrar_mensaje("Horno encendido", 2000, MENU_AMB_HORNO); }
-    else if (tecla == 'B') { horno_apagar(); mostrar_mensaje("Horno apagado", 2000, MENU_AMB_HORNO); }
+    if (tecla == 'A') { horno_encender(60, 180); menu_mostrar_horno(); }
+    else if (tecla == 'B') { horno_apagar(); menu_mostrar_horno(); }
     else if (tecla == 'D') { menu_estado = MENU_AMBIENTE; menu_mostrar_ambiente(); }
     else { menu_mostrar_horno(); }
 }
 
 static void menu_procesar_sonido(char tecla) {
-    if (tecla == 'A') { sonido_encender(); sonido_volumen(50); mostrar_mensaje("Sonido ON", 2000, MENU_AMB_SONIDO); }
-    else if (tecla == 'B') { sonido_apagar(); mostrar_mensaje("Sonido OFF", 2000, MENU_AMB_SONIDO); }
+    if (tecla == 'A') { uint8_t n = sonido_nivel_get() + 10; if (n > 100) n = 100; sonido_set_volumen(n); menu_mostrar_sonido(); }
+    else if (tecla == 'B') { uint8_t n = sonido_nivel_get(); if (n >= 10) n -= 10; else n = 0; sonido_set_volumen(n); menu_mostrar_sonido(); }
+    else if (tecla == 'C') { sonido_set_volumen(0); menu_mostrar_sonido(); }
     else if (tecla == 'D') { menu_estado = MENU_AMBIENTE; menu_mostrar_ambiente(); }
     else { menu_mostrar_sonido(); }
 }
