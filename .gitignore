@@ -45,8 +45,13 @@ out/
 .pio/
 .pioenvs/
 .piolibdeps/
+Proyecto/build/
 __pycache__/
 *.pyc
+
+### Backups ###
+*.bak
+_original/
 
 ### Python venv ###
 .venv/

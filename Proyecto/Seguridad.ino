@@ -26,9 +26,13 @@
 #define HUMO_PIN  PINL
 #define HUMO_BIT  PL6
 
-#define ALARMA_LED_DDR  DDRC
-#define ALARMA_LED_PORT PORTC
-#define ALARMA_LED_PIN  PC3
+#define INTRUSION_LED_DDR  DDRC
+#define INTRUSION_LED_PORT PORTC
+#define INTRUSION_LED_PIN  PC3
+
+#define INCENDIO_LED_DDR  DDRA
+#define INCENDIO_LED_PORT PORTA
+#define INCENDIO_LED_PIN  PA2
 
 #define BUZZER_DDR  DDRD
 #define BUZZER_PORT PORTD
@@ -46,13 +50,15 @@
 #define SERVO_90GRADOS 2500
 
 typedef enum {
-    EST_ALARMA_DESACTIVADA,
-    EST_ALARMA_ACTIVADA,
-    EST_ALARMA_DISPARADA
+    ALARMA_DESACTIVADA,
+    ALARMA_ACTIVADA,
+    ALARMA_DISPARADA
 } estado_alarma_t;
 
-static estado_alarma_t alarma_estado = EST_ALARMA_DESACTIVADA;
-static bool alarma_sensor_prev[5];
+static estado_alarma_t intrusion_estado = ALARMA_DESACTIVADA;
+static estado_alarma_t incendio_estado = ALARMA_DESACTIVADA;
+static bool intrusion_sensor_prev[4];
+static bool incendio_sensor_prev;
 static unsigned long alarma_ultimo_poll = 0;
 static uint16_t codigo_actual;
 
@@ -139,20 +145,24 @@ static void puertas_actualizar(void) {
 }
 
 void alarma_init(void) {
-    alarma_estado = EST_ALARMA_DESACTIVADA;
+    intrusion_estado = ALARMA_DESACTIVADA;
+    incendio_estado = ALARMA_DESACTIVADA;
     SENSOR_DDR &= ~((1 << SENSOR_PUERTA_PP) | (1 << SENSOR_PUERTA_GAR) |
                     (1 << SENSOR_VENTANA_SAL) | (1 << SENSOR_VENTANA_COC));
     SENSOR_PORT |= (1 << SENSOR_PUERTA_PP) | (1 << SENSOR_PUERTA_GAR) |
                    (1 << SENSOR_VENTANA_SAL) | (1 << SENSOR_VENTANA_COC);
     HUMO_DDR &= ~(1 << HUMO_BIT);
     HUMO_PORT |= (1 << HUMO_BIT);
-    ALARMA_LED_DDR |= (1 << ALARMA_LED_PIN);
-    ALARMA_LED_PORT &= ~(1 << ALARMA_LED_PIN);
+    INTRUSION_LED_DDR |= (1 << INTRUSION_LED_PIN);
+    INTRUSION_LED_PORT &= ~(1 << INTRUSION_LED_PIN);
+    INCENDIO_LED_DDR |= (1 << INCENDIO_LED_PIN);
+    INCENDIO_LED_PORT &= ~(1 << INCENDIO_LED_PIN);
     BUZZER_DDR |= (1 << BUZZER_PIN);
     BUZZER_PORT &= ~(1 << BUZZER_PIN);
-    for (uint8_t i = 0; i < 5; i++) {
-        alarma_sensor_prev[i] = true;
+    for (uint8_t i = 0; i < 4; i++) {
+        intrusion_sensor_prev[i] = true;
     }
+    incendio_sensor_prev = true;
     IMAN_DDR |= (1 << IMAN_PP);
     IMAN_PORT &= ~(1 << IMAN_PP);
     codigo_actual = lista_leer_codigo();
@@ -171,19 +181,38 @@ void alarma_cambiar_codigo(uint16_t nuevo_codigo) {
     codigo_actual = nuevo_codigo;
 }
 
-void alarma_activar(void) {
-    alarma_estado = EST_ALARMA_ACTIVADA;
-    ALARMA_LED_PORT |= (1 << ALARMA_LED_PIN);
+void alarma_intrusion_activar(void) {
+    intrusion_estado = ALARMA_ACTIVADA;
+    INTRUSION_LED_PORT |= (1 << INTRUSION_LED_PIN);
 }
 
-void alarma_desactivar(void) {
-    alarma_estado = EST_ALARMA_DESACTIVADA;
-    ALARMA_LED_PORT &= ~(1 << ALARMA_LED_PIN);
+void alarma_intrusion_desactivar(void) {
+    intrusion_estado = ALARMA_DESACTIVADA;
+    INTRUSION_LED_PORT &= ~(1 << INTRUSION_LED_PIN);
     BUZZER_PORT &= ~(1 << BUZZER_PIN);
 }
 
+bool alarma_intrusion_activa(void) {
+    return intrusion_estado == ALARMA_ACTIVADA || intrusion_estado == ALARMA_DISPARADA;
+}
+
+void alarma_incendio_activar(void) {
+    incendio_estado = ALARMA_ACTIVADA;
+    INCENDIO_LED_PORT |= (1 << INCENDIO_LED_PIN);
+}
+
+void alarma_incendio_desactivar(void) {
+    incendio_estado = ALARMA_DESACTIVADA;
+    INCENDIO_LED_PORT &= ~(1 << INCENDIO_LED_PIN);
+    BUZZER_PORT &= ~(1 << BUZZER_PIN);
+}
+
+bool alarma_incendio_activa(void) {
+    return incendio_estado == ALARMA_ACTIVADA || incendio_estado == ALARMA_DISPARADA;
+}
+
 bool alarma_activa(void) {
-    return alarma_estado == EST_ALARMA_ACTIVADA || alarma_estado == EST_ALARMA_DISPARADA;
+    return alarma_intrusion_activa() || alarma_incendio_activa();
 }
 
 static void alarma_notificar(const char *texto) {
@@ -212,47 +241,60 @@ void alarma_actualizar(void) {
     if (ahora - alarma_ultimo_poll < 100) return;
     alarma_ultimo_poll = ahora;
 
-    bool sensor_disparado[5];
+    bool sensor_disparado[4];
     sensor_disparado[0] = !alarma_leer_sensor(SENSOR_PUERTA_PP);
     sensor_disparado[1] = !alarma_leer_sensor(SENSOR_PUERTA_GAR);
     sensor_disparado[2] = !alarma_leer_sensor(SENSOR_VENTANA_SAL);
     sensor_disparado[3] = !alarma_leer_sensor(SENSOR_VENTANA_COC);
-    sensor_disparado[4] = !(HUMO_PIN & (1 << HUMO_BIT));
+    bool humo_disparado = !(HUMO_PIN & (1 << HUMO_BIT));
 
-    if (alarma_estado == EST_ALARMA_ACTIVADA) {
-        for (uint8_t i = 0; i < 5; i++) {
-            if (sensor_disparado[i] && !alarma_sensor_prev[i]) {
-                alarma_estado = EST_ALARMA_DISPARADA;
-                ALARMA_LED_PORT &= ~(1 << ALARMA_LED_PIN);
+    if (intrusion_estado == ALARMA_ACTIVADA) {
+        for (uint8_t i = 0; i < 4; i++) {
+            if (sensor_disparado[i] && !intrusion_sensor_prev[i]) {
+                intrusion_estado = ALARMA_DISPARADA;
+                INTRUSION_LED_PORT &= ~(1 << INTRUSION_LED_PIN);
                 const char *lugar = "Intrusion en ventana";
                 if (i == 0) lugar = "Intrusion en Puerta PP";
                 else if (i == 1) lugar = "Intrusion en Puerta Gar";
                 else if (i == 2) lugar = "Intrusion en Ventana Sala";
-                else if (i == 3) lugar = "Intrusion en Ventana Cocina";
-                else lugar = "Humo en la vivienda";
+                else lugar = "Intrusion en Ventana Cocina";
                 alarma_notificar(lugar);
                 break;
             }
         }
     }
 
-    for (uint8_t i = 0; i < 5; i++) {
-        alarma_sensor_prev[i] = sensor_disparado[i];
+    if (incendio_estado == ALARMA_ACTIVADA) {
+        if (humo_disparado && !incendio_sensor_prev) {
+            incendio_estado = ALARMA_DISPARADA;
+            INCENDIO_LED_PORT &= ~(1 << INCENDIO_LED_PIN);
+            alarma_notificar("Humo en la vivienda");
+        }
     }
+
+    for (uint8_t i = 0; i < 4; i++) {
+        intrusion_sensor_prev[i] = sensor_disparado[i];
+    }
+    incendio_sensor_prev = humo_disparado;
 
     puertas_actualizar();
 
-    if (alarma_estado == EST_ALARMA_DISPARADA) {
-        static unsigned long ultimo_led = 0;
-        if (ahora - ultimo_led >= 200) {
-            ultimo_led = ahora;
-            ALARMA_LED_PORT ^= (1 << ALARMA_LED_PIN);
+    if (intrusion_estado == ALARMA_DISPARADA || incendio_estado == ALARMA_DISPARADA) {
+        static unsigned long ultimo_blink = 0;
+        if (ahora - ultimo_blink >= 200) {
+            ultimo_blink = ahora;
+            if (intrusion_estado == ALARMA_DISPARADA) {
+                INTRUSION_LED_PORT ^= (1 << INTRUSION_LED_PIN);
+            }
+            if (incendio_estado == ALARMA_DISPARADA) {
+                INCENDIO_LED_PORT ^= (1 << INCENDIO_LED_PIN);
+            }
         }
     }
 }
 
 void alarma_buzzer_sonar(void) {
-    if (alarma_estado == EST_ALARMA_DISPARADA) {
+    if (intrusion_estado == ALARMA_DISPARADA || incendio_estado == ALARMA_DISPARADA) {
         static unsigned long ultimo = 0;
         unsigned long ahora = micros();
         if (ahora - ultimo >= 500) {

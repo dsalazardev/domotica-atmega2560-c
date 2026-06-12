@@ -149,33 +149,48 @@ static const char teclado_mapa[4][4] = {
     {'*', '0', '#', 'D'}
 };
 
+volatile uint8_t teclado_fila_actual = 0;
+static volatile char tecla_int_valor = 0;
+static volatile uint8_t tecla_int_lista = 0;
+
 void teclado_init(void) {
     KEY_ROW_DDR |= 0x0F;
     KEY_ROW_PORT = (KEY_ROW_PORT & 0xF0) | 0x0F;
     KEY_COL_DDR &= ~0x0F;
     KEY_COL_PORT |= 0x0F;
+    PCICR |= (1 << PCIE2);
+    PCMSK2 |= 0x0F;
 }
 
 char teclado_scan(void) {
-    static unsigned long ultimo_scan = 0;
-    if (millis() - ultimo_scan < 50) return 0;
-    ultimo_scan = millis();
-
-    for (uint8_t f = 0; f < 4; f++) {
-        KEY_ROW_PORT = (KEY_ROW_PORT & 0xF0) | (~(1 << f) & 0x0F);
-        __asm__ __volatile__("nop\n\t" "nop\n\t" "nop\n\t" "nop\n\t"
-                             "nop\n\t" "nop\n\t");
-        uint8_t col_bits = KEY_COL_PIN & 0x0F;
-        for (uint8_t c = 0; c < 4; c++) {
-            if (!(col_bits & (1 << c))) {
-                char tecla = teclado_mapa[f][c];
-                KEY_ROW_PORT = (KEY_ROW_PORT & 0xF0) | 0x0F;
-                return tecla;
-            }
-        }
+    for (teclado_fila_actual = 0; teclado_fila_actual < 4; teclado_fila_actual++) {
+        KEY_ROW_PORT = (KEY_ROW_PORT & 0xF0) | (~(1 << teclado_fila_actual) & 0x0F);
+        for (volatile uint16_t d = 0; d < 1000; d++);
     }
-    KEY_ROW_PORT = (KEY_ROW_PORT & 0xF0) | 0x0F;
-    return 0;
+    // Leave last scanned row (3) LOW for continuous detection between ticks
+
+    char t = 0;
+    cli();
+    if (tecla_int_lista) { t = tecla_int_valor; tecla_int_lista = 0; }
+    sei();
+    return t;
+}
+
+ISR(PCINT2_vect) {
+    uint8_t col = PINK & 0x0F;
+    if (col == 0x0F) return;
+
+    uint8_t c;
+    if      (col == 0x0E) c = 0;
+    else if (col == 0x0D) c = 1;
+    else if (col == 0x0B) c = 2;
+    else if (col == 0x07) c = 3;
+    else return;
+
+    if (!tecla_int_lista) {
+        tecla_int_valor = teclado_mapa[teclado_fila_actual][c];
+        tecla_int_lista = 1;
+    }
 }
 
 #define SPI_DDR   DDRB

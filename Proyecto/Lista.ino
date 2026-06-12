@@ -78,10 +78,12 @@ void lista_actualizar(void) {
     if (total_productos > LISTA_MAX) total_productos = 0;
     for (uint8_t i = 0; i < total_productos; i++) {
         uint16_t addr = EEPROM_LISTA_DATA + i * (LISTA_NOMBRE_LEN + 1);
+        memset(lista_nombres[i], 0, LISTA_NOMBRE_LEN);
         for (uint8_t j = 0; j < LISTA_NOMBRE_LEN; j++) {
-            lista_nombres[i][j] = eeprom_read_byte((uint8_t*)(addr + j));
+            uint8_t b = eeprom_read_byte((uint8_t*)(addr + j));
+            if (b == 0xFF) break;
+            lista_nombres[i][j] = b;
         }
-        lista_nombres[i][LISTA_NOMBRE_LEN - 1] = '\0';
         lista_cantidades[i] = eeprom_read_byte((uint8_t*)(addr + LISTA_NOMBRE_LEN));
     }
     lista_cargada = true;
