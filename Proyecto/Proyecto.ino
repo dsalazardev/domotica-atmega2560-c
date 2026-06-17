@@ -446,14 +446,22 @@ static void menu_procesar_juegos_recarga(void) {
 }
 
 static void menu_procesar_recarga_accesos(void) {
-    uint8_t accesos = (uint8_t)entrada_a_codigo();
+    uint8_t accesos = 0;
+    for (uint8_t i = 0; i < entrada_pos; i++) {
+        accesos = accesos * 10 + entrada_digitos[i];
+    }
     if (accesos > 100) accesos = 100;
-    juegos_cargar_accesos(rfid_get_uid(), accesos);
-    lcd_borrar(); lcd_imprimir("Recarga exitosa");
-    lcd_posicion(1, 0); lcd_imprimir("Saldo: ");
-    mostrar_numero(accesos); lcd_imprimir(" usos");
-    menu_mensaje_hasta = millis() + 3000;
-    menu_estado = MENU_MENSAJE;
+    const uint8_t* uid = rfid_get_uid();
+    if (juegos_cargar_accesos(uid, accesos)) {
+        lcd_borrar(); lcd_imprimir("Recarga exitosa");
+        lcd_posicion(1, 0); lcd_imprimir("Saldo: ");
+        mostrar_numero(accesos); lcd_imprimir(" usos");
+        menu_mensaje_hasta = millis() + 3000;
+        menu_estado = MENU_MENSAJE;
+        menu_volver_a = MENU_JUEGOS;
+    } else {
+        mostrar_mensaje("Error", 2000, MENU_JUEGOS);
+    }
 }
 
 void menu_iniciar(void) {
@@ -472,7 +480,13 @@ void menu_procesar_tecla(char tecla) {
     if (tecla == '*' && menu_estado != MENU_CODIGO_INPUT &&
         menu_estado != MENU_SEG_CAMBIAR_COD_NUEVO1 &&
         menu_estado != MENU_SEG_CAMBIAR_COD_NUEVO2) {
-        rfid_simular_tarjeta(RFID_UID_VALIDO);
+        if (menu_estado == MENU_ACC_ENROLAR) {
+            uint8_t uid[4];
+            rfid_generar_uid(uid);
+            rfid_simular_tarjeta(uid);
+        } else {
+            rfid_simular_tarjeta(RFID_UID_VALIDO);
+        }
     }
     if (tecla == '#' && menu_estado != MENU_CODIGO_INPUT &&
         menu_estado != MENU_SEG_CAMBIAR_COD_NUEVO1 &&
@@ -484,7 +498,6 @@ void menu_procesar_tecla(char tecla) {
         if (menu_procesar_ingreso_codigo(tecla) && codigo_pendiente) {
             codigo_pendiente = false;
             if (menu_seleccion >= 100) { menu_codigo_ingresado(); }
-            else if (menu_seleccion == 12) { menu_seleccion = 0; menu_procesar_recarga_accesos(); }
             else if (menu_seleccion >= 10) { menu_procesar_juegos_recarga(); }
             else { menu_codigo_ingresado(); }
         }
@@ -538,14 +551,32 @@ void menu_procesar_tecla(char tecla) {
     }
 
     if (menu_estado == MENU_JUEG_RECARGAR) {
-        if (rfid_tarjeta_nueva()) {
-            lcd_borrar(); lcd_imprimir("Accesos a sumar:");
-            lcd_posicion(1, 0); entrada_pos = 0;
-            for (uint8_t i = 0; i < COD_DIGITOS; i++) entrada_digitos[i] = 0;
-            menu_seleccion = 12;
-            menu_estado = MENU_CODIGO_INPUT;
-            codigo_pendiente = false;
-        } else if (tecla == 'B') { menu_estado = MENU_JUEGOS; menu_mostrar_juegos(); }
+        static bool esperando_tarjeta = true;
+        if (esperando_tarjeta && rfid_tarjeta_nueva()) {
+            if (!rfid_validar_uid(rfid_get_uid())) {
+                mostrar_mensaje("Tarjeta no valida", 2000, MENU_JUEGOS);
+            } else {
+                lcd_borrar(); lcd_imprimir("Accesos a sumar:");
+                lcd_posicion(1, 0);
+                entrada_pos = 0;
+                for (uint8_t i = 0; i < COD_DIGITOS; i++) entrada_digitos[i] = 0;
+                esperando_tarjeta = false;
+            }
+        } else if (!esperando_tarjeta) {
+            if (tecla >= '0' && tecla <= '9' && entrada_pos < COD_DIGITOS) {
+                entrada_digitos[entrada_pos] = tecla - '0';
+                lcd_dato(tecla);
+                entrada_pos++;
+            } else if (tecla == 'A' && entrada_pos > 0) {
+                esperando_tarjeta = true;
+                menu_procesar_recarga_accesos();
+            } else if (tecla == 'B' || tecla == '#') {
+                esperando_tarjeta = true;
+                menu_estado = MENU_JUEGOS; menu_mostrar_juegos();
+            }
+        } else if (tecla == 'B') {
+            menu_estado = MENU_JUEGOS; menu_mostrar_juegos();
+        }
         return;
     }
 
@@ -704,6 +735,58 @@ static void procesar_comando(char* linea) {
         uint8_t idx = (uint8_t)parse_uint16(tok);
         lista_eliminar(idx);
         usart_respuesta_ok(PSTR("item eliminado"));
+    } else if (strcmp_P(tok, PSTR("RFID")) == 0) {
+        tok = strtok(NULL, " ");
+        if (tok == NULL) { usart_respuesta_error(); return; }
+        if (strcmp_P(tok, PSTR("ENROL")) == 0) {
+            uint8_t uid[4];
+            tok = strtok(NULL, " ");
+            if (tok != NULL && strcmp_P(tok, PSTR("*")) == 0) {
+                memcpy(uid, RFID_UID_VALIDO, 4);
+            } else {
+                rfid_generar_uid(uid);
+            }
+            if (rfid_enrolar(uid)) {
+                usart_print(PSTR("OK: enrolado idx="));
+                uint8_t cnt = rfid_get_conteo();
+                usart_transmit('0' + cnt - 1);
+                usart_transmit('\n');
+            } else {
+                usart_respuesta_ok(PSTR("error al enrolar"));
+            }
+        } else if (strcmp_P(tok, PSTR("LISTA")) == 0) {
+            uint8_t cnt = rfid_get_conteo();
+            usart_print(PSTR("OK: "));
+            static const char hex[] = "0123456789ABCDEF";
+            for (uint8_t i = 0; i < cnt; i++) {
+                if (i > 0) usart_transmit(' ');
+                uint8_t uid[4];
+                lista_leer_uid(i, uid);
+                usart_transmit(hex[uid[0] >> 4]);
+                usart_transmit(hex[uid[0] & 0x0F]);
+                usart_transmit(':');
+                usart_transmit(hex[uid[1] >> 4]);
+                usart_transmit(hex[uid[1] & 0x0F]);
+                usart_transmit(':');
+                usart_transmit(hex[uid[2] >> 4]);
+                usart_transmit(hex[uid[2] & 0x0F]);
+                usart_transmit(':');
+                usart_transmit(hex[uid[3] >> 4]);
+                usart_transmit(hex[uid[3] & 0x0F]);
+            }
+            usart_transmit('\n');
+        } else if (strcmp_P(tok, PSTR("BORRAR")) == 0) {
+            tok = strtok(NULL, " ");
+            if (tok == NULL) { usart_respuesta_error(); return; }
+            uint8_t idx = (uint8_t)parse_uint16(tok);
+            if (rfid_borrar(idx)) {
+                usart_respuesta_ok(PSTR("borrado"));
+            } else {
+                usart_respuesta_ok(PSTR("indice invalido"));
+            }
+        } else {
+            usart_respuesta_error();
+        }
     } else if (strcmp_P(tok, PSTR("ESTADO?")) == 0) {
         usart_envia_estado();
     } else {

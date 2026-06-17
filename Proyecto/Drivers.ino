@@ -167,7 +167,6 @@ char teclado_scan(void) {
         KEY_ROW_PORT = (KEY_ROW_PORT & 0xF0) | (~(1 << teclado_fila_actual) & 0x0F);
         for (volatile uint16_t d = 0; d < 1000; d++);
     }
-    // Leave last scanned row (3) LOW for continuous detection between ticks
 
     char t = 0;
     cli();

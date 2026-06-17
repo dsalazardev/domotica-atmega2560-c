@@ -388,6 +388,14 @@ uint8_t rfid_get_conteo(void) {
     return lista_leer_conteo();
 }
 
+void rfid_generar_uid(uint8_t *uid) {
+    static uint8_t contador = 0;
+    uid[0] = 0xAA;
+    uid[1] = contador++;
+    uid[2] = 0xBB;
+    uid[3] = 0xCC;
+}
+
 bool juegos_cargar_accesos(const uint8_t *uid, uint8_t accesos) {
     int8_t idx = rfid_buscar_uid(uid);
     if (idx < 0) return false;
