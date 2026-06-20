@@ -453,9 +453,10 @@ static void menu_procesar_recarga_accesos(void) {
     if (accesos > 100) accesos = 100;
     const uint8_t* uid = rfid_get_uid();
     if (juegos_cargar_accesos(uid, accesos)) {
+        uint8_t saldo = juegos_consultar_saldo(uid);
         lcd_borrar(); lcd_imprimir("Recarga exitosa");
         lcd_posicion(1, 0); lcd_imprimir("Saldo: ");
-        mostrar_numero(accesos); lcd_imprimir(" usos");
+        mostrar_numero(saldo); lcd_imprimir(" usos");
         menu_mensaje_hasta = millis() + 3000;
         menu_estado = MENU_MENSAJE;
         menu_volver_a = MENU_JUEGOS;
@@ -500,17 +501,24 @@ void menu_procesar_tecla(char tecla) {
             if (menu_seleccion >= 100) { menu_codigo_ingresado(); }
             else if (menu_seleccion >= 10) { menu_procesar_juegos_recarga(); }
             else { menu_codigo_ingresado(); }
+        } else if (tecla == 'B') {
+            if (menu_seleccion >= 103) { menu_estado = MENU_SEG_INCENDIO; menu_mostrar_seg_incendio(); }
+            else if (menu_seleccion >= 101) { menu_estado = MENU_SEG_INTRUSION; menu_mostrar_seg_intrusion(); }
+            else if (menu_seleccion >= 10) { menu_estado = MENU_JUEGOS; menu_mostrar_juegos(); }
+            else { menu_estado = MENU_SEGURIDAD; menu_mostrar_seguridad(); }
         }
         return;
     }
 
     if (menu_estado == MENU_SEG_CAMBIAR_COD_NUEVO1) {
         if (menu_procesar_ingreso_codigo(tecla) && codigo_pendiente) menu_procesar_cambio_nuevo1();
+        else if (tecla == 'B') { menu_estado = MENU_SEGURIDAD; menu_mostrar_seguridad(); }
         return;
     }
 
     if (menu_estado == MENU_SEG_CAMBIAR_COD_NUEVO2) {
         if (menu_procesar_ingreso_codigo(tecla) && codigo_pendiente) menu_procesar_cambio_nuevo2();
+        else if (tecla == 'B') { menu_estado = MENU_SEGURIDAD; menu_mostrar_seguridad(); }
         return;
     }
 
