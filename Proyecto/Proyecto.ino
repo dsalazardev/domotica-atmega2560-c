@@ -354,6 +354,7 @@ static void menu_procesar_acceso_puerta(char tecla) {
 }
 
 static void menu_procesar_puerta_sel(char tecla) {
+    if (tecla == 0) return;
     if (tecla == 'A') { puerta_abrir_principal(); mostrar_mensaje("Puerta abierta", 2000, MENU_ACCESO); }
     else if (tecla == 'B') { servo_abrir(); mostrar_mensaje("Garaje abierto", 2000, MENU_ACCESO); }
     else { mostrar_mensaje("Op invalida", 1000, MENU_ACCESO); }
@@ -408,6 +409,7 @@ static void menu_procesar_ilum(char tecla) {
 }
 
 static void menu_procesar_temp(char tecla) {
+    if (tecla == 0) return;
     if (tecla == 'A') { temperatura_ajustar(1); menu_mostrar_temp(); }
     else if (tecla == 'B') { temperatura_ajustar(-1); menu_mostrar_temp(); }
     else if (tecla == 'D') { menu_estado = MENU_AMBIENTE; menu_mostrar_ambiente(); }
@@ -415,6 +417,7 @@ static void menu_procesar_temp(char tecla) {
 }
 
 static void menu_procesar_horno(char tecla) {
+    if (tecla == 0) return;
     if (tecla == 'A') { horno_encender(60, 180); menu_mostrar_horno(); }
     else if (tecla == 'B') { horno_apagar(); menu_mostrar_horno(); }
     else if (tecla == 'D') { menu_estado = MENU_AMBIENTE; menu_mostrar_ambiente(); }
@@ -422,6 +425,7 @@ static void menu_procesar_horno(char tecla) {
 }
 
 static void menu_procesar_sonido(char tecla) {
+    if (tecla == 0) return;
     uint8_t n;
     if (tecla == 'A') {
         n = sonido_nivel_get(); if (n <= 90) n += 10; else n = 100;
@@ -937,6 +941,8 @@ void loop() {
         char tecla = teclado_scan();
         if (tecla != 0 && tecla != ultima_tecla) {
             menu_procesar_tecla(tecla);
+        } else if (tecla == 0) {
+            menu_procesar_tecla(0);
         }
         ultima_tecla = tecla;
 
