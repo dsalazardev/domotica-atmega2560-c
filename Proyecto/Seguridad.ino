@@ -2,6 +2,11 @@
 #include <avr/io.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include <SPI.h>
+#include <MFRC522.h>
+
+#define RFID_SS_PIN 53
+MFRC522 rfid(RFID_SS_PIN, 13);
 
 #ifndef UID_LEN
 #define UID_LEN 4
@@ -354,21 +359,9 @@ static int8_t rfid_buscar_uid(const uint8_t *uid) {
     return -1;
 }
 
-#define RFID_RST_PIN 13
-
 void rfid_init(void) {
-    pinMode(RFID_RST_PIN, OUTPUT);
-    digitalWrite(RFID_RST_PIN, LOW);
-    {
-        unsigned long t = millis();
-        while (millis() - t < 2);
-    }
-    digitalWrite(RFID_RST_PIN, HIGH);
-    {
-        unsigned long t = millis();
-        while (millis() - t < 10);
-    }
-    mfrc522_init();
+    SPI.begin();
+    rfid.PCD_Init();
     rfid_tarjeta_presente = false;
     rfid_tarjeta_anterior = false;
     uint8_t cnt = lista_leer_conteo();
@@ -376,10 +369,10 @@ void rfid_init(void) {
         lista_escribir_conteo(0);
     }
 #if RFID_DEBUG
+    dbg_print("RFID Version:0x");
     {
-        uint8_t ver = mfrc522_read_reg(0x37);
-        dbg_print("RFID ver:0x");
         static const char hex[] = "0123456789ABCDEF";
+        uint8_t ver = rfid.PCD_ReadRegister(MFRC522::VersionReg);
         usart_transmit(hex[ver >> 4]);
         usart_transmit(hex[ver & 0x0F]);
         usart_transmit('\r');
@@ -436,12 +429,17 @@ void rfid_actualizar(void) {
     rfid_ultimo_poll = ahora;
 
     rfid_tarjeta_anterior = rfid_tarjeta_presente;
-    rfid_tarjeta_presente = mfrc522_leer_uid(rfid_uid);
+
+    if (rfid.PICC_IsNewCardPresent() && rfid.PICC_ReadCardSerial()) {
+        rfid_tarjeta_presente = true;
+        for (uint8_t i = 0; i < rfid.uid.size && i < UID_LEN; i++) {
+            rfid_uid[i] = rfid.uid.uidByte[i];
+        }
+        rfid.PICC_HaltA();
 #if RFID_DEBUG
-    static bool prev = false;
-    if (rfid_tarjeta_presente != prev) {
-        prev = rfid_tarjeta_presente;
-        if (rfid_tarjeta_presente) {
+        static bool prev = false;
+        if (rfid_tarjeta_presente != prev) {
+            prev = rfid_tarjeta_presente;
             dbg_print("RFID OK UID:");
             static const char hex[] = "0123456789ABCDEF";
             for (uint8_t i = 0; i < UID_LEN; i++) {
@@ -450,11 +448,18 @@ void rfid_actualizar(void) {
             }
             usart_transmit('\r');
             usart_transmit('\n');
-        } else {
+        }
+#endif
+    } else {
+        rfid_tarjeta_presente = false;
+#if RFID_DEBUG
+        static bool prev2 = false;
+        if (rfid_tarjeta_presente != prev2) {
+            prev2 = rfid_tarjeta_presente;
             dbg_print("RFID no card\r\n");
         }
-    }
 #endif
+    }
 }
 
 bool rfid_tarjeta_nueva(void) {

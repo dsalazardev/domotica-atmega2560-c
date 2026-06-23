@@ -893,7 +893,6 @@ void setup() {
     usart2_init();
     usart3_init();
     timer_init();
-    spi_master_init();
     alarma_init();
     rfid_init();
     iluminacion_iniciar();
