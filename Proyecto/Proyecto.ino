@@ -8,6 +8,11 @@
 #define COD_DIGITOS 4
 #endif
 
+// Modo fisico: switches entregan VCC al activarse (activo-alto)
+// Modo Proteus: botones conectan a GND al presionarse (activo-bajo)
+// Cambiar a 0 para compilar para Proteus/simulacion
+#define MODO_FISICO 1
+
 typedef enum {
     MENU_PRINCIPAL,
     MENU_SEGURIDAD,
@@ -213,8 +218,8 @@ static void menu_procesar_main(char tecla) {
     switch (tecla) {
         case '1': menu_estado = MENU_SEGURIDAD; menu_mostrar_seguridad(); break;
         case '2': menu_estado = MENU_ACCESO; menu_mostrar_acceso(); break;
-        case '3': menu_estado = MENU_JUEGOS; menu_mostrar_juegos(); break;
         case '4': menu_estado = MENU_AMBIENTE; menu_mostrar_ambiente(); break;
+        case '3': menu_estado = MENU_JUEGOS; menu_mostrar_juegos(); break;
         default: break;
     }
 }
@@ -482,9 +487,7 @@ void menu_procesar_tecla(char tecla) {
         menu_estado != MENU_SEG_CAMBIAR_COD_NUEVO1 &&
         menu_estado != MENU_SEG_CAMBIAR_COD_NUEVO2) {
         if (menu_estado == MENU_ACC_ENROLAR) {
-            uint8_t uid[4];
-            rfid_generar_uid(uid);
-            rfid_simular_tarjeta(uid);
+            rfid_simular_tarjeta(RFID_UID_VALIDO);
         } else {
             rfid_simular_tarjeta(RFID_UID_VALIDO);
         }

