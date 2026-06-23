@@ -6,10 +6,6 @@
 #define UID_LEN 4
 #endif
 
-#define USART_RX_BUF_SIZE 64
-static volatile uint8_t usart_rx_buf[USART_RX_BUF_SIZE];
-static volatile uint8_t usart_rx_head = 0;
-static volatile uint8_t usart_rx_tail = 0;
 
 #define LCD_RS 8
 #define LCD_EN 9
@@ -218,225 +214,46 @@ uint8_t spi_master_receive(void) {
     return spi_master_transmit(0x00);
 }
 
-void usart_init(void) {
-    UBRR0H = 0;
-    UBRR0L = 104;
-    UCSR0B = (1 << RXEN0) | (1 << TXEN0) | (1 << RXCIE0);
-    UCSR0C = (1 << UCSZ01) | (1 << UCSZ00);
-}
+/* ---- USART0 → Serial ---- */
+void usart_init(void)         { Serial.begin(9600); }
+void usart_transmit(uint8_t d){ Serial.write(d); }
+uint8_t usart_leer(void)      { int c = Serial.read(); return c < 0 ? 0 : (uint8_t)c; }
+uint8_t usart_disponible(void){ return (uint8_t)Serial.available(); }
 
-void usart_transmit(uint8_t data) {
-    while (!(UCSR0A & (1 << UDRE0)));
-    UDR0 = data;
-}
-
-uint8_t usart_leer(void) {
-    uint8_t c = 0;
-    cli();
-    if (usart_rx_head != usart_rx_tail) {
-        c = usart_rx_buf[usart_rx_tail];
-        usart_rx_tail = (usart_rx_tail + 1) % USART_RX_BUF_SIZE;
-    }
-    sei();
-    return c;
-}
-
-uint8_t usart_disponible(void) {
-    uint8_t disp;
-    cli();
-    disp = (usart_rx_head - usart_rx_tail) % USART_RX_BUF_SIZE;
-    sei();
-    return disp;
-}
-
-ISR(USART0_RX_vect) {
-    uint8_t c = UDR0;
-    uint8_t next = (usart_rx_head + 1) % USART_RX_BUF_SIZE;
-    if (next != usart_rx_tail) {
-        usart_rx_buf[usart_rx_head] = c;
-        usart_rx_head = next;
-    }
-}
-
-#define USART1_RX_BUF_SIZE 64
-static volatile uint8_t usart1_rx_buf[USART1_RX_BUF_SIZE];
-static volatile uint8_t usart1_rx_head = 0;
-static volatile uint8_t usart1_rx_tail = 0;
-
-void usart1_init(void) {
-    UBRR1H = 0;
-    UBRR1L = 104;
-    UCSR1B = (1 << RXEN1) | (1 << TXEN1) | (1 << RXCIE1);
-    UCSR1C = (1 << UCSZ11) | (1 << UCSZ10);
-    PORTD |= (1 << PD2);
-}
-
-void usart1_transmit(uint8_t data) {
-    while (!(UCSR1A & (1 << UDRE1)));
-    UDR1 = data;
-}
-
-uint8_t usart1_leer(void) {
-    uint8_t c = 0;
-    cli();
-    if (usart1_rx_head != usart1_rx_tail) {
-        c = usart1_rx_buf[usart1_rx_tail];
-        usart1_rx_tail = (usart1_rx_tail + 1) % USART1_RX_BUF_SIZE;
-    }
-    sei();
-    return c;
-}
-
-uint8_t usart1_disponible(void) {
-    uint8_t disp;
-    cli();
-    disp = (usart1_rx_head - usart1_rx_tail) % USART1_RX_BUF_SIZE;
-    sei();
-    return disp;
-}
-
-void usart1_print(const char* s) {
-    while (pgm_read_byte(s)) {
-        usart1_transmit(pgm_read_byte(s++));
-    }
-}
-
-void usart1_puts(const char* s) {
-    while (*s) usart1_transmit(*s++);
-}
-
-ISR(USART1_RX_vect) {
-    uint8_t c = UDR1;
-    uint8_t next = (usart1_rx_head + 1) % USART1_RX_BUF_SIZE;
-    if (next != usart1_rx_tail) {
-        usart1_rx_buf[usart1_rx_head] = c;
-        usart1_rx_head = next;
-    }
-}
-
-#define USART2_RX_BUF_SIZE 64
-static volatile uint8_t usart2_rx_buf[USART2_RX_BUF_SIZE];
-static volatile uint8_t usart2_rx_head = 0;
-static volatile uint8_t usart2_rx_tail = 0;
-
-void usart2_init(void) {
-    UBRR2H = 0;
-    UBRR2L = 104;
-    UCSR2B = (1 << RXEN2) | (1 << RXCIE2);
-    UCSR2C = (1 << UCSZ21) | (1 << UCSZ20);
-    DDRH &= ~(1 << PH1);
-}
-
-void usart2_transmit(uint8_t data) {
-    while (!(UCSR2A & (1 << UDRE2)));
-    UDR2 = data;
-}
-
-uint8_t usart2_leer(void) {
-    uint8_t c = 0;
-    cli();
-    if (usart2_rx_head != usart2_rx_tail) {
-        c = usart2_rx_buf[usart2_rx_tail];
-        usart2_rx_tail = (usart2_rx_tail + 1) % USART2_RX_BUF_SIZE;
-    }
-    sei();
-    return c;
-}
-
-uint8_t usart2_disponible(void) {
-    uint8_t disp;
-    cli();
-    disp = (usart2_rx_head - usart2_rx_tail) % USART2_RX_BUF_SIZE;
-    sei();
-    return disp;
-}
-
-void usart2_print(const char* s) {
-    while (pgm_read_byte(s)) {
-        usart2_transmit(pgm_read_byte(s++));
-    }
-}
-
-void usart2_puts(const char* s) {
-    while (*s) usart2_transmit(*s++);
-}
-
-ISR(USART2_RX_vect) {
-    uint8_t c = UDR2;
-    uint8_t next = (usart2_rx_head + 1) % USART2_RX_BUF_SIZE;
-    if (next != usart2_rx_tail) {
-        usart2_rx_buf[usart2_rx_head] = c;
-        usart2_rx_head = next;
-    }
-}
-
-void usart_puts(const char* s) {
-    while (*s) usart_transmit(*s++);
-}
-
+void usart_puts(const char* s) { while (*s) usart_transmit(*s++); }
 void usart_print(const char* s) {
-    while (pgm_read_byte(s)) {
-        usart_transmit(pgm_read_byte(s++));
-    }
+    while (pgm_read_byte(s)) { usart_transmit(pgm_read_byte(s++)); }
+}
+void usart_println(const char* s) { usart_print(s); usart_transmit('\n'); }
+
+/* ---- USART1 → Serial1 ---- */
+void usart1_init(void)          { Serial1.begin(9600); }
+void usart1_transmit(uint8_t d) { Serial1.write(d); }
+uint8_t usart1_leer(void)       { int c = Serial1.read(); return c < 0 ? 0 : (uint8_t)c; }
+uint8_t usart1_disponible(void) { return (uint8_t)Serial1.available(); }
+void usart1_puts(const char* s) { while (*s) usart1_transmit(*s++); }
+void usart1_print(const char* s) {
+    while (pgm_read_byte(s)) { usart1_transmit(pgm_read_byte(s++)); }
 }
 
-void usart_println(const char* s) {
-    usart_print(s);
-    usart_transmit('\n');
+/* ---- USART2 → Serial2 ---- */
+void usart2_init(void)          { Serial2.begin(9600); }
+void usart2_transmit(uint8_t d) { Serial2.write(d); }
+uint8_t usart2_leer(void)       { int c = Serial2.read(); return c < 0 ? 0 : (uint8_t)c; }
+uint8_t usart2_disponible(void) { return (uint8_t)Serial2.available(); }
+void usart2_puts(const char* s) { while (*s) usart2_transmit(*s++); }
+void usart2_print(const char* s) {
+    while (pgm_read_byte(s)) { usart2_transmit(pgm_read_byte(s++)); }
 }
 
-#define USART3_RX_BUF_SIZE 64
-static volatile uint8_t usart3_rx_buf[USART3_RX_BUF_SIZE];
-static volatile uint8_t usart3_rx_head = 0;
-static volatile uint8_t usart3_rx_tail = 0;
-
-void usart3_init(void) {
-    UBRR3H = 0;
-    UBRR3L = 104;
-    UCSR3B = (1 << RXEN3) | (1 << RXCIE3);
-    UCSR3C = (1 << UCSZ31) | (1 << UCSZ30);
-    DDRJ &= ~(1 << PJ1);
-}
-
-void usart3_transmit(uint8_t data) {
-    while (!(UCSR3A & (1 << UDRE3)));
-    UDR3 = data;
-}
-
-uint8_t usart3_leer(void) {
-    uint8_t c = 0;
-    cli();
-    if (usart3_rx_head != usart3_rx_tail) {
-        c = usart3_rx_buf[usart3_rx_tail];
-        usart3_rx_tail = (usart3_rx_tail + 1) % USART3_RX_BUF_SIZE;
-    }
-    sei();
-    return c;
-}
-
-uint8_t usart3_disponible(void) {
-    uint8_t disp;
-    cli();
-    disp = (usart3_rx_head - usart3_rx_tail) % USART3_RX_BUF_SIZE;
-    sei();
-    return disp;
-}
-
-void usart3_puts(const char* s) {
-    while (*s) usart3_transmit(*s++);
-}
-
+/* ---- USART3 → Serial3 ---- */
+void usart3_init(void)          { Serial3.begin(9600); }
+void usart3_transmit(uint8_t d) { Serial3.write(d); }
+uint8_t usart3_leer(void)       { int c = Serial3.read(); return c < 0 ? 0 : (uint8_t)c; }
+uint8_t usart3_disponible(void) { return (uint8_t)Serial3.available(); }
+void usart3_puts(const char* s) { while (*s) usart3_transmit(*s++); }
 void usart3_print(const char* s) {
     while (pgm_read_byte(s)) {
         usart3_transmit(pgm_read_byte(s++));
-    }
-}
-
-ISR(USART3_RX_vect) {
-    uint8_t c = UDR3;
-    uint8_t next = (usart3_rx_head + 1) % USART3_RX_BUF_SIZE;
-    if (next != usart3_rx_tail) {
-        usart3_rx_buf[usart3_rx_head] = c;
-        usart3_rx_head = next;
     }
 }
