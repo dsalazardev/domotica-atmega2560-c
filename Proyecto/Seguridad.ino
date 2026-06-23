@@ -368,20 +368,23 @@ void rfid_init(void) {
     if (cnt == 0xFF || cnt > MAX_TARJETAS) {
         lista_escribir_conteo(0);
     }
-#if RFID_DEBUG
+
+    /* Mostrar version en LCD 2s para diagnostico de SPI */
     {
         static const char hex[] = "0123456789ABCDEF";
         uint8_t ver = rfid.PCD_ReadRegister(MFRC522::VersionReg);
-        dbg_print("RFID Version:0x");
-        usart_transmit(hex[ver >> 4]);
-        usart_transmit(hex[ver & 0x0F]);
-        usart_transmit('\r');
-        usart_transmit('\n');
-        if (ver == 0x00 || ver == 0xFF) {
-            dbg_print("RFID ERROR: sin comunicacion SPI\r\n");
+        lcd_borrar();
+        lcd_imprimir("RFID v:0x");
+        lcd_dato(hex[ver >> 4]);
+        lcd_dato(hex[ver & 0x0F]);
+        lcd_posicion(1, 0);
+        if (ver == 0x91 || ver == 0x92) {
+            lcd_imprimir("SPI OK");
+        } else {
+            lcd_imprimir("SPI FAIL!");
         }
+        delay(2000);
     }
-#endif
 }
 
 bool rfid_validar_uid(const uint8_t *uid) {
