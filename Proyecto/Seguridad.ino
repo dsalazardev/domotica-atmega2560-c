@@ -369,14 +369,17 @@ void rfid_init(void) {
         lista_escribir_conteo(0);
     }
 #if RFID_DEBUG
-    dbg_print("RFID Version:0x");
     {
         static const char hex[] = "0123456789ABCDEF";
         uint8_t ver = rfid.PCD_ReadRegister(MFRC522::VersionReg);
+        dbg_print("RFID Version:0x");
         usart_transmit(hex[ver >> 4]);
         usart_transmit(hex[ver & 0x0F]);
         usart_transmit('\r');
         usart_transmit('\n');
+        if (ver == 0x00 || ver == 0xFF) {
+            dbg_print("RFID ERROR: sin comunicacion SPI\r\n");
+        }
     }
 #endif
 }
@@ -436,29 +439,21 @@ void rfid_actualizar(void) {
             rfid_uid[i] = rfid.uid.uidByte[i];
         }
         rfid.PICC_HaltA();
+        rfid.PCD_StopCrypto1();
 #if RFID_DEBUG
-        static bool prev = false;
-        if (rfid_tarjeta_presente != prev) {
-            prev = rfid_tarjeta_presente;
-            dbg_print("RFID OK UID:");
+        dbg_print("RFID OK UID:");
+        {
             static const char hex[] = "0123456789ABCDEF";
             for (uint8_t i = 0; i < UID_LEN; i++) {
                 usart_transmit(hex[rfid_uid[i] >> 4]);
                 usart_transmit(hex[rfid_uid[i] & 0x0F]);
             }
-            usart_transmit('\r');
-            usart_transmit('\n');
         }
+        usart_transmit('\r');
+        usart_transmit('\n');
 #endif
     } else {
         rfid_tarjeta_presente = false;
-#if RFID_DEBUG
-        static bool prev2 = false;
-        if (rfid_tarjeta_presente != prev2) {
-            prev2 = rfid_tarjeta_presente;
-            dbg_print("RFID no card\r\n");
-        }
-#endif
     }
 }
 
