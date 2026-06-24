@@ -214,7 +214,6 @@ uint8_t spi_master_receive(void) {
     return spi_master_transmit(0x00);
 }
 
-/* ---- USART0 → Serial ---- */
 void usart_init(void)         { Serial.begin(9600); }
 void usart_transmit(uint8_t d){ Serial.write(d); }
 uint8_t usart_leer(void)      { int c = Serial.read(); return c < 0 ? 0 : (uint8_t)c; }
@@ -226,7 +225,6 @@ void usart_print(const char* s) {
 }
 void usart_println(const char* s) { usart_print(s); usart_transmit('\n'); }
 
-/* ---- USART1 → Serial1 ---- */
 void usart1_init(void)          { Serial1.begin(9600); }
 void usart1_transmit(uint8_t d) { Serial1.write(d); }
 uint8_t usart1_leer(void)       { int c = Serial1.read(); return c < 0 ? 0 : (uint8_t)c; }
@@ -236,7 +234,6 @@ void usart1_print(const char* s) {
     while (pgm_read_byte(s)) { usart1_transmit(pgm_read_byte(s++)); }
 }
 
-/* ---- USART2 → Serial2 ---- */
 void usart2_init(void)          { Serial2.begin(9600); }
 void usart2_transmit(uint8_t d) { Serial2.write(d); }
 uint8_t usart2_leer(void)       { int c = Serial2.read(); return c < 0 ? 0 : (uint8_t)c; }
@@ -246,7 +243,6 @@ void usart2_print(const char* s) {
     while (pgm_read_byte(s)) { usart2_transmit(pgm_read_byte(s++)); }
 }
 
-/* ---- USART3 → Serial3 ---- */
 void usart3_init(void)          { Serial3.begin(9600); }
 void usart3_transmit(uint8_t d) { Serial3.write(d); }
 uint8_t usart3_leer(void)       { int c = Serial3.read(); return c < 0 ? 0 : (uint8_t)c; }

@@ -8,9 +8,6 @@
 #define COD_DIGITOS 4
 #endif
 
-// Modo fisico: switches entregan VCC al activarse (activo-alto)
-// Modo Proteus: botones conectan a GND al presionarse (activo-bajo)
-// Cambiar a 0 para compilar para Proteus/simulacion
 #define MODO_FISICO 1
 
 typedef enum {
@@ -855,7 +852,6 @@ static void maestro_procesar_respuesta(void) {
     if (maestro_estado != MAESTRO_ESPERANDO_HORNO &&
         maestro_estado != MAESTRO_ESPERANDO_SONIDO) return;
 
-    // 1. Leer bytes disponibles primero
     while (usart1_disponible() > 0) {
         char c = usart1_leer();
         if (c == '\n' || c == '\r') {
@@ -875,7 +871,6 @@ static void maestro_procesar_respuesta(void) {
         }
     }
 
-    // 2. Timeout 1000ms
     if (maestro_estado != MAESTRO_OCIOSO && millis() - maestro_tiempo_envio >= 1000) {
         if (maestro_resp_pos > 0) {
             maestro_respuesta[maestro_resp_pos] = '\0';

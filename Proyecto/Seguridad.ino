@@ -380,7 +380,6 @@ void rfid_init(void) {
         lista_escribir_conteo(0);
     }
 
-    /* Mostrar version en LCD 2s para diagnostico de SPI */
     {
         static const char hex[] = "0123456789ABCDEF";
         uint8_t ver = rfid.PCD_ReadRegister(MFRC522::VersionReg);
