@@ -63,6 +63,10 @@ static void dbg_print(const char *s) {
 #define SERVO_0GRADOS 125
 #define SERVO_90GRADOS 2500
 
+#define GARAJE_LED_DDR  DDRB
+#define GARAJE_LED_PORT PORTB
+#define GARAJE_LED_PIN  PB6
+
 typedef enum {
     ALARMA_DESACTIVADA,
     ALARMA_ACTIVADA,
@@ -100,6 +104,8 @@ void servo_init(void) {
     TCCR1B = (1 << WGM13) | (1 << WGM12) | (1 << CS11) | (1 << CS10);
     ICR1 = SERVO_PWM_TOP;
     OCR1A = SERVO_0GRADOS;
+    GARAJE_LED_DDR |= (1 << GARAJE_LED_PIN);
+    GARAJE_LED_PORT &= ~(1 << GARAJE_LED_PIN);
 }
 
 static void servo_escribir(uint16_t valor) {
@@ -110,6 +116,7 @@ void servo_abrir(void) {
     if (servo_estado != SERVO_PARADO) return;
     servo_estado = SERVO_ABRIENDO;
     servo_timer = millis();
+    GARAJE_LED_PORT |= (1 << GARAJE_LED_PIN);
 }
 
 void servo_cerrar(void) {
@@ -136,6 +143,7 @@ static void servo_actualizar(void) {
         case SERVO_CERRANDO:
             if (ahora - servo_timer >= 1000) {
                 servo_estado = SERVO_PARADO;
+                GARAJE_LED_PORT &= ~(1 << GARAJE_LED_PIN);
             }
             break;
         default:
