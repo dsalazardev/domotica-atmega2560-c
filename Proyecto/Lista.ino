@@ -4,6 +4,8 @@
 #include <string.h>
 #include <avr/eeprom.h>
 
+#define EEPROM_MAGIC      0x0F
+#define EEPROM_MAGIC_VAL  0xA5
 #define EEPROM_CODIGO     0x00
 #define EEPROM_RFID_CNT   0x02
 #define EEPROM_RFID_LIST  0x10
@@ -72,8 +74,18 @@ uint8_t lista_obtener_cantidad(uint8_t indice) {
     return lista_cantidades[indice];
 }
 
+static void eeprom_factory_reset(void) {
+    eeprom_write_word((uint16_t*)EEPROM_CODIGO, 1234);
+    eeprom_write_byte((uint8_t*)EEPROM_RFID_CNT, 0);
+    eeprom_write_byte((uint8_t*)EEPROM_LISTA_CNT, 0);
+    eeprom_write_byte((uint8_t*)EEPROM_MAGIC, EEPROM_MAGIC_VAL);
+}
+
 void lista_actualizar(void) {
     if (lista_cargada) return;
+    if (eeprom_read_byte((uint8_t*)EEPROM_MAGIC) != EEPROM_MAGIC_VAL) {
+        eeprom_factory_reset();
+    }
     total_productos = eeprom_read_byte((uint8_t*)EEPROM_LISTA_CNT);
     if (total_productos > LISTA_MAX) total_productos = 0;
     for (uint8_t i = 0; i < total_productos; i++) {

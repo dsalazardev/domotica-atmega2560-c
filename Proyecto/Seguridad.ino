@@ -196,10 +196,6 @@ void alarma_init(void) {
     IMAN_DDR |= (1 << IMAN_PP);
     IMAN_PORT &= ~(1 << IMAN_PP);
     codigo_actual = lista_leer_codigo();
-    if (codigo_actual == 0xFFFF || codigo_actual == 0x0000) {
-        codigo_actual = 1234;
-        lista_escribir_codigo(codigo_actual);
-    }
     servo_init();
 }
 
