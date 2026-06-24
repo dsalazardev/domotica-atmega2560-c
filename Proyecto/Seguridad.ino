@@ -230,6 +230,13 @@ bool alarma_intrusion_activa(void) {
     return intrusion_estado == ALARMA_ACTIVADA || intrusion_estado == ALARMA_DISPARADA;
 }
 
+void alarma_intrusion_disparar(const char *lugar) {
+    if (intrusion_estado != ALARMA_ACTIVADA) return;
+    intrusion_estado = ALARMA_DISPARADA;
+    INTRUSION_LED_PORT &= ~(1 << INTRUSION_LED_PIN);
+    alarma_notificar(lugar);
+}
+
 void alarma_incendio_activar(void) {
     incendio_estado = ALARMA_ACTIVADA;
     INCENDIO_LED_PORT |= (1 << INCENDIO_LED_PIN);

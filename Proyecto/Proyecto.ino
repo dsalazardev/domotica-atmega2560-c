@@ -355,9 +355,17 @@ static void menu_procesar_acceso_puerta(char tecla) {
 
 static void menu_procesar_puerta_sel(char tecla) {
     if (tecla == 0) return;
-    if (tecla == 'A') { puerta_abrir_principal(); mostrar_mensaje("Puerta abierta", 2000, MENU_ACCESO); }
-    else if (tecla == 'B') { servo_abrir(); mostrar_mensaje("Garaje abierto", 2000, MENU_ACCESO); }
-    else { mostrar_mensaje("Op invalida", 1000, MENU_ACCESO); }
+    if (tecla == 'A') {
+        puerta_abrir_principal();
+        alarma_intrusion_disparar("Acceso RFID Puerta PP");
+        mostrar_mensaje("Puerta abierta", 2000, MENU_ACCESO);
+    } else if (tecla == 'B') {
+        servo_abrir();
+        alarma_intrusion_disparar("Acceso RFID Garaje");
+        mostrar_mensaje("Garaje abierto", 2000, MENU_ACCESO);
+    } else {
+        mostrar_mensaje("Op invalida", 1000, MENU_ACCESO);
+    }
 }
 
 static void menu_procesar_borrar_sel(char tecla) {
